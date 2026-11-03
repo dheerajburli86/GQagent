@@ -122,7 +122,7 @@ Needs Node 20 or newer (`node -v`). Inside the folder:
 
 ```bash
 npm install
-npm test                      # should print: # pass 140
+npm test                      # should print: # pass 141
 cp .env.example .env          # then fill in the values from Steps 1–2
 npm run doctor
 ```

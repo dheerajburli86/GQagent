@@ -20,7 +20,6 @@ const cfg = cfgMod.load();
 const log = (m) => console.log(new Date().toISOString().slice(0, 19) + " " + m);
 
 if (!cfg.telegramToken) { console.error("TELEGRAM_BOT_TOKEN is not set (see DEPLOY.md, Step 1)."); process.exit(1); }
-if (!cfg.allowedUserIds.size) { console.error("TELEGRAM_ALLOWED_USER_IDS is empty: nobody could use the bot. Set your Telegram ID (send /whoami to the bot)."); process.exit(1); }
 
 const tg = new TelegramClient({ token: cfg.telegramToken, apiBase: cfg.telegramApiBase, log });
 const provider = createProvider(cfg);

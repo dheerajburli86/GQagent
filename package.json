@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/projects_data.test.cjs tests/engines.test.cjs tests/open_files.test.cjs tests/macro.test.cjs tests/simple.test.cjs tests/watchlists_filings.test.cjs tests/core.test.cjs tests/agent.test.cjs tests/tools.test.cjs tests/more.test.cjs tests/telegram.test.cjs tests/grok.test.cjs tests/tasks.test.cjs",
+    "test": "node --test tests/boot.test.cjs tests/projects_data.test.cjs tests/engines.test.cjs tests/open_files.test.cjs tests/macro.test.cjs tests/simple.test.cjs tests/watchlists_filings.test.cjs tests/core.test.cjs tests/agent.test.cjs tests/tools.test.cjs tests/more.test.cjs tests/telegram.test.cjs tests/grok.test.cjs tests/tasks.test.cjs",
     "doctor": "node scripts/doctor.js",
     "ask": "node scripts/ask.js",
     "evals": "node scripts/evals.js",
