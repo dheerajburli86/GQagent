@@ -1,0 +1,16 @@
+# Railway reads this file automatically (it sits at the repo root).
+#   - builds with the Dockerfile
+#   - ONE replica: Telegram allows only one poller per bot token, and the
+#     conversation memory and per-person limits live in this process
+#   - health check on /health (the only HTTP route; no public domain needed)
+#   - settings and budgets are written to /data: attach a Railway volume there
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+numReplicas = 1
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

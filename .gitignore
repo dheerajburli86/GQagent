@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*
+!.env.example
+eval-results-*.json
+*.zip
+.DS_Store

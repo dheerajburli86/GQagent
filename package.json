@@ -1,0 +1,24 @@
+{
+  "name": "gquants-agent",
+  "version": "2.0.0",
+  "private": true,
+  "description": "GQuants Agent: a Telegram bot that answers questions about the team's projects (read-only) and about anything else.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/engines.test.cjs tests/open_files.test.cjs tests/macro.test.cjs tests/simple.test.cjs tests/watchlists_filings.test.cjs tests/core.test.cjs tests/agent.test.cjs tests/tools.test.cjs tests/more.test.cjs tests/telegram.test.cjs tests/grok.test.cjs tests/tasks.test.cjs",
+    "doctor": "node scripts/doctor.js",
+    "ask": "node scripts/ask.js",
+    "evals": "node scripts/evals.js",
+    "task": "node scripts/run-task.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.45.4",
+    "fflate": "^0.8.3",
+    "mathjs": "13.2.3",
+    "unpdf": "2.1.0"
+  }
+}
