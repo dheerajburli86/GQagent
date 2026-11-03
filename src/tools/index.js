@@ -11,6 +11,8 @@
 //            recent_changes, show_commit                                    GitHub API, GET only
 //   live     heatmap market data                                            read-only allowlist, only when configured
 //   research web_research (xAI Grok search, sourced)                        only when XAI_API_KEY is set
+//   data     project_tables, project_query: every configured project database, SELECT only, team members
+//   busybee  busybee_create_task, busybee_update_task: through BusyBee's own API, as the asker
 //   tasks    schedule_task, list_scheduled_tasks, manage_scheduled_task,    live chats only; write the bot's own task list
 //            edit_watchlist (admins)                                        and watchlists
 const web = require("./web");
@@ -26,6 +28,8 @@ const scheduleTools = require("./schedule_tools");
 const filings = require("./filings");
 const watchlists = require("./watchlists");
 const macro = require("./macro");
+const database = require("./database");
+const busybee = require("./busybee");
 const { byId } = require("../projects");
 
 const timeTool = {
@@ -46,7 +50,7 @@ const NO_DB = (t) => ({ ...t, run: (a, ctx) => t.run(a, { ...ctx, sb: null }) })
 
 /** buildTools({selected, user, attached, liveOn}). user.isAdmin unlocks adminOnly tools (none today). */
 /** taskTools: true only in a live conversation where a TaskRunner exists (never in scheduled runs). */
-function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false }) {
+function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false }) {
   const visible = (t) => !t.adminOnly || user.isAdmin;
   const general = [timeTool, ...search.makeTools(), ...web.makeTools(), calc.tool, publicData.tool, filings.tool, macro.tool, watchlists.readTool]
     .filter(visible).map((t) => ({ ...NO_DB(t), kind: "general" }));
@@ -55,7 +59,11 @@ function buildTools({ selected, user = {}, attached = [], liveOn = false, resear
   const liveTools = liveOn ? live.makeTools(selected, { projectsById: byId }) : [];
   const researchTools = researchTool ? [{ ...NO_DB(researchTool), kind: "general" }] : [];
   const tasks = taskTools ? [...scheduleTools.makeTools(), ...(user.isAdmin ? [watchlists.editTool] : [])].map((t) => ({ ...NO_DB(t), kind: "tasks" })) : [];
-  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...tasks];
+  // Full read access to every configured project database (team members; checked at call time).
+  const dataTools = projectDbs ? database.makeTools(selected, projectDbs).map((t) => ({ ...t, kind: "data" })) : [];
+  // BusyBee actions: live chats only (never scheduled runs), when BusyBee is selected and configured.
+  const bbTools = busybeeActions && taskTools && selected.includes("busybee") ? busybee.tools.map((t) => ({ ...t, kind: "busybee" })) : [];
+  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...tasks];
 }
 
 module.exports = { buildTools, timeTool, research };

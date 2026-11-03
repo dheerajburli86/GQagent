@@ -36,19 +36,26 @@ if (cfg.heatmapSupabaseUrl && cfg.heatmapSupabaseKey) {
   live = buildLiveClients(sb);
 }
 
+// Every project database that has a URL and key set: read in full by team members.
+const { buildProjectDbs } = require("./src/projectdb");
+const { Team } = require("./src/team");
+const projectDbs = buildProjectDbs(process.env);
+const team = new Team({ busybee: projectDbs.busybee || null, log });
+log(`[agent] project databases: ${Object.keys(projectDbs).join(", ") || "none"}; access: ${cfg.projectDataAccess === "everyone" ? "everyone" : team.available ? "team members (Telegram linked in BusyBee)" : "nobody yet (set BUSYBEE_SUPABASE_URL/KEY to identify team members)"}; BusyBee actions: ${cfg.busybeeAppUrl && cfg.busybeeAgentSecret ? "on" : "off"}`);
+
 if (!provider) log("[agent] DEEPINFRA_API_KEY is not set: the bot will reply that the model is not configured");
 if (!cfg.githubToken) log("[agent] GITHUB_READ_TOKEN is not set: private repos cannot be read");
 if (!Object.keys(live).length) log("[agent] HEATMAP_SUPABASE_URL/KEY not set: live market tools are off");
 
 const researchTool = cfg.xaiKey ? require("./src/tools/research").makeTool({ apiKey: cfg.xaiKey, model: cfg.grokResearchModel }) : null;
 if (!cfg.xaiKey) log("[agent] XAI_API_KEY not set: web_research (Grok search) is off");
-const bot = new Bot({ cfg, tg, provider, engines, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool });
+const bot = new Bot({ cfg, tg, provider, engines, projectDbs, team, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool });
 
 // Scheduled monitoring tasks: post to the chat that created them.
 const { TaskRunner } = require("./src/tasks");
 const { toTelegramMessages } = require("./src/format");
 const runner = new TaskRunner({
-  cfg, store, provider, engines, snapshots, live, liveOn: Object.keys(live).length > 0, researchTool, log,
+  cfg, store, provider, engines, projectDbs, team, snapshots, live, liveOn: Object.keys(live).length > 0, researchTool, log,
   isChatAllowed: (chatId) => require("./src/access").chatAllowed(cfg, chatId),
   post: async (chatId, markdown, { taskId } = {}) => {
     const parts = toTelegramMessages(markdown);

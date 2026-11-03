@@ -66,6 +66,15 @@ You don't have to do anything: normally **DeepInfra** answers.
 - Write **@grok @deepinfra** to have both answer and get one combined answer.
 - The same works for regular updates: "@grok every morning at 9, news on Japan's economy".
 
+## Your projects and BusyBee (team members)
+
+Link your Telegram in BusyBee once (Settings → Telegram). Then you can ask about
+anything in our projects, and give BusyBee work just by saying it:
+- "What's overdue for me in BusyBee?" · "What is Asha working on this week?"
+- "Assign Ravi a task: send the Q3 report, due Friday 5 pm, high priority"
+- "Mark my 'Fix tile' task as done" · "Move my deadline request…" (BusyBee's usual rules apply)
+- "What alerts did FinXray send today?" · "Did last night's heatmap refresh fail?"
+
 ## Good to know
 
 - It gives facts and sources, not buy or sell advice.

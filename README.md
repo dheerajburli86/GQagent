@@ -23,6 +23,8 @@ buy, sell or hold advice and no price targets.
 | Files you send | PDF, Excel (.xlsx, every sheet), Word (.docx), PowerPoint (.pptx), CSV, text, code; remembered for follow-up questions |
 | The web | "What did RBI announce at its latest policy meeting?" |
 | Choosing the AI | untagged → DeepInfra · `@grok …` → Grok with live web search · `@grok @deepinfra …` → both, merged by DeepInfra into one answer |
+| Every project's live data | "Who has overdue tasks in BusyBee?" · "What alerts did FinXray send today?" · "Which heatmap pipeline failed last night?" (team members) |
+| BusyBee actions | "Assign Asha a task to update the Q3 deck by Friday 5 pm" · "Mark my Fix tile task done" |
 | Company filings | "Latest concall transcript of HDFC Bank: key points" · "NVIDIA's last 6 quarters of revenue and operating cash flow from its SEC filings" |
 | Macro news by country | "What did the Bank of Japan decide?" · "Macro news this week for all our countries" |
 | Team watchlists | "Any news on our India holdings this week?" (after `/list add india-holdings …`) |
@@ -170,6 +172,10 @@ src/
   providers/              deepinfra.js (any OpenAI-compatible endpoint: DeepInfra, xAI Grok), index.js
   tools/research.js       web_research (xAI Grok, Responses API with web search)
   tools/schedule_tools.js schedule_task, list_scheduled_tasks, manage_scheduled_task (live chats only)
+  projectdb.js            one read handle per project database; credential tables/columns never read
+  team.js                 team member = Telegram linked in BusyBee
+  tools/database.js       project_tables, project_query (SELECT only)
+  tools/busybee.js        busybee_create_task / _update_task via BusyBee's API
   engines.js              @grok / @deepinfra / both: picks the AI, runs both in parallel, merges
   tools/filings.js        company_filings (NSE, BSE, SEC EDGAR)
   tools/macro.js          macro_news (country list from the dashboard, official-source queries)
@@ -184,7 +190,7 @@ scripts/doctor.js         checks every setting and source (npm run doctor)
 scripts/ask.js            ask from your terminal, with your real keys (npm run ask)
 scripts/evals.js          runs the evals through the real agent (npm run evals)
 scripts/run-task.js       tries a monitoring task once (npm run task)
-tests/                    npm test: 130 tests, no network, no keys
+tests/                    npm test: 140 tests, no network, no keys
 ```
 
 ## Configuration
@@ -203,7 +209,7 @@ all with defaults. The important ones:
 
 ```bash
 npm install
-npm test                      # 130 tests, no network or keys
+npm test                      # 140 tests, no network or keys
 cp .env.example .env          # fill in what you have
 npm run doctor                # checks settings, Telegram token, model, repos, sources
 npm run ask -- "question"     # ask from the terminal, with your real keys

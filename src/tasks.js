@@ -64,13 +64,16 @@ async function executeTask(task, deps, now = new Date()) {
     store: deps.snapshots, live: deps.live || {}, selected, githubToken: cfg.githubToken, attachments: [],
     fetch: deps.fetchImpl || fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
     lists: deps.store || null, secUserAgent: cfg.secUserAgent || undefined,
+    projectDbs: deps.projectDbs || null, openData: cfg.projectDataAccess === "everyone",
+    // A task reads project data as the person who set it up (if they are a team member).
+    member: deps.team ? await deps.team.member(task.createdBy) : null,
     user: { id: `task:${task.id}`, label: `scheduled task #${task.id}` }, audit: () => {},
   };
   const started = Date.now();
   try {
     const out = await runWithEngines({
       mode: task.engine || "default", engines, researchTool: deps.researchTool || null,
-      buildTools: (research) => buildTools({ selected, user: {}, attached: [], liveOn: !!deps.liveOn, researchTool: research }),
+      buildTools: (research) => buildTools({ selected, user: {}, attached: [], liveOn: !!deps.liveOn, researchTool: research, projectDbs: deps.projectDbs || null }),
       buildSystem: (toolNames) => buildSystemPrompt({ user: { label: `scheduled monitoring task #${task.id} (created by ${task.createdByLabel || "a team member"})` }, selected, toolNames, telegram: true, scheduled: true }),
       ctx, history: [], message: buildRunPrompt(task, now),
       maxSteps: cfg.taskMaxSteps, deadline: started + cfg.taskDeadlineMs,

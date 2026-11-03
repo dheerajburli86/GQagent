@@ -124,6 +124,32 @@ async function main() {
     try { const x = await pd.run(args, { fetch }); if (x.error) warn(`${label}: ${x.error}`); else ok(`${label} answers`); }
     catch (e) { warn(`${label}: ${String(e.message).slice(0, 120)}`); }
   }
+  section("Project databases (full read access for team members)");
+  {
+    const { buildProjectDbs } = require("../src/projectdb");
+    const dbs = buildProjectDbs(process.env);
+    if (!Object.keys(dbs).length) warn("no project database is set (BUSYBEE_/FINXRAY_/HEATMAP_SUPABASE_URL and _KEY)");
+    for (const [p, db] of Object.entries(dbs)) {
+      try { const t = await db.tables(); ok(`${p}: ${Object.keys(t).length} tables readable`); }
+      catch (e) { bad(`${p}: ${String(e.message).slice(0, 140)} (check the URL and that the key is the service_role / secret key)`); }
+    }
+    if (dbs.busybee) {
+      try {
+        const r = await dbs.busybee.from("user_telegram").select("user_id", { count: "exact", head: true });
+        if (r.error) throw new Error(r.error.message);
+        ok(`team members (Telegram linked in BusyBee): ${r.count}`);
+      } catch (e) { bad(`can't read BusyBee's user_telegram: ${String(e.message).slice(0, 120)}`); }
+    } else if (cfg.projectDataAccess !== "everyone") warn("BUSYBEE_SUPABASE_URL/KEY not set: nobody can be recognised as a team member, so project databases stay closed");
+    if (cfg.busybeeAppUrl && cfg.busybeeAgentSecret) {
+      if (cfg.busybeeAgentSecret.length < 24) bad("BUSYBEE_AGENT_SECRET is shorter than 24 characters; BusyBee will refuse it");
+      try {
+        const r = await fetch(`${cfg.busybeeAppUrl}/api/tasks`, { method: "PUT", headers: { "content-type": "application/json", "x-agent-secret": "wrong-on-purpose-xxxxxxxxxxxxxxxx", "x-agent-telegram-id": "1" }, body: "{}", signal: AbortSignal.timeout(15000) });
+        if (r.status === 401) ok(`BusyBee app answers at ${cfg.busybeeAppUrl} (a wrong secret is refused, as it should be)`);
+        else warn(`BusyBee app answered HTTP ${r.status} to a wrong secret; is the agent-auth patch deployed?`);
+      } catch (e) { bad(`BusyBee app unreachable: ${String(e.message).slice(0, 120)}`); }
+    } else warn("BUSYBEE_APP_URL / BUSYBEE_AGENT_SECRET not set: the bot can read BusyBee but not create or update tasks");
+  }
+
   section("Macro news (country sources)");
   try {
     const mn = require("../src/tools/macro").tool;

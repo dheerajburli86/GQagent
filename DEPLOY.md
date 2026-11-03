@@ -122,7 +122,7 @@ Needs Node 20 or newer (`node -v`). Inside the folder:
 
 ```bash
 npm install
-npm test                      # should print: # pass 130
+npm test                      # should print: # pass 140
 cp .env.example .env          # then fill in the values from Steps 1–2
 npm run doctor
 ```
@@ -326,3 +326,36 @@ their ID when the bot refuses them, or via /whoami):
 | `TELEGRAM_ALLOWED_GROUP_IDS` | only these groups are answered |
 | `TELEGRAM_ADMIN_USER_IDS` | only these people can change stock lists and see `/status` |
 | `AGENT_DAILY_TOKENS_PER_USER` | a daily usage cap per person |
+
+## Full project data and BusyBee actions
+
+**Reading every project's database.** In Railway, set a URL and key for each project
+(Supabase → that project → Project Settings → API: the Project URL and the
+`service_role` / secret key):
+
+```
+BUSYBEE_SUPABASE_URL=   BUSYBEE_SUPABASE_KEY=
+FINXRAY_SUPABASE_URL=   FINXRAY_SUPABASE_KEY=
+HEATMAP_SUPABASE_URL=   HEATMAP_SUPABASE_KEY=
+```
+
+The agent can then read every table of each (read-only), but only for **team
+members**: people whose Telegram is linked in BusyBee (Settings → Telegram). Nobody
+keeps a list. Everyone else still gets the public features. Credentials stored in the
+databases are never read, and pay/bank columns are shown only to BusyBee admins.
+`PROJECT_DATA_ACCESS=everyone` removes the team check (not recommended: BusyBee holds
+staff data).
+
+**Creating and updating BusyBee tasks.** The agent asks BusyBee to do it, as the person
+who asked, so BusyBee's own permissions and alerts apply.
+
+1. Add the two files from `busybee-agent-patch.zip` to the BusyBee repo
+   (`lib/agent-auth.ts` new, `app/api/tasks/route.ts` changed), commit and push.
+2. Make a secret (PowerShell):
+   `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); ($b | % { $_.ToString("x2") }) -join ""`
+3. BusyBee's Vercel → Settings → Environment Variables: `AGENT_SHARED_SECRET=<that secret>`
+   (and `SUPABASE_SERVICE_ROLE_KEY` must already be set; Telegram alerts use it). Redeploy.
+4. Railway (the agent): `BUSYBEE_APP_URL=https://<your busybee address>` and
+   `BUSYBEE_AGENT_SECRET=<the same secret>`.
+5. `npm run doctor` shows the databases, the number of linked team members, and whether
+   BusyBee answers.

@@ -33,6 +33,17 @@ function load(e = process.env) {
     heatmapSupabaseUrl: (e.HEATMAP_SUPABASE_URL || "").replace(/\/$/, ""),
     heatmapSupabaseKey: e.HEATMAP_SUPABASE_KEY || "",
     githubToken: e.GITHUB_READ_TOKEN || "",
+    // Project databases (read in full; see src/projectdb.js). Each pair is optional.
+    busybeeSupabaseUrl: (e.BUSYBEE_SUPABASE_URL || "").replace(/\/$/, ""),
+    busybeeSupabaseKey: e.BUSYBEE_SUPABASE_KEY || "",
+    finxraySupabaseUrl: (e.FINXRAY_SUPABASE_URL || "").replace(/\/$/, ""),
+    finxraySupabaseKey: e.FINXRAY_SUPABASE_KEY || "",
+    // "team" (default): project databases only for people whose Telegram is linked in BusyBee.
+    // "everyone": anyone who messages the bot can read them.
+    projectDataAccess: (e.PROJECT_DATA_ACCESS || "team").toLowerCase() === "everyone" ? "everyone" : "team",
+    // BusyBee actions (create / update tasks) through BusyBee's own API.
+    busybeeAppUrl: (e.BUSYBEE_APP_URL || "").replace(/\/$/, ""),
+    busybeeAgentSecret: e.BUSYBEE_AGENT_SECRET || "",
     // SEC asks every client to identify itself: "Company name contact@email".
     secUserAgent: e.SEC_USER_AGENT || "",
     // Files sent in a chat stay available for follow-up questions (RAM only, cleared by /new).

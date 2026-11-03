@@ -65,8 +65,8 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
 /refresh  reload the project code`;
 
 class Bot {
-  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null }) {
-    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner });
+  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null }) {
+    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team });
     // engines: { deepinfra, grok }. Without them (older callers, tests) the one provider is DeepInfra.
     this._engines = engines;
     this.me = null;
@@ -550,7 +550,15 @@ class Bot {
       waitNote = this.tg.sendPlain(chatId, "🔎 Looking into it… this can take up to a minute.").then((r) => r && r.message_id).catch(() => null);
     }, this.cfg.waitNoteMs);
     const started = Date.now();
+    // Team member = Telegram linked in BusyBee. Gives the project databases and BusyBee actions.
+    let member = null;
+    if (!scheduled && this.team && m.from) {
+      member = await this.team.member(m.from.id);
+      if (member) member = { ...member, telegramId: String(m.from.id) };
+    }
+    const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const ctx = {
+      projectDbs: this.projectDbs, member, openData: this.cfg.projectDataAccess === "everyone", busybeeApi,
       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken, // repo tools read ctx.store = the snapshot store
       attachments: attached, fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
       lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
@@ -562,8 +570,8 @@ class Bot {
       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task }),
-        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, selected, attached, toolNames, telegram: true }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi }),
+        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
         ctx, history: hist, message: text,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
         checkBudget: () => this.store.check(userId, this.cfg, this.now()),
