@@ -118,11 +118,11 @@ git push -u origin main
 
 ## Step 4: Check it on your laptop first (about 5 min, recommended)
 
-Needs Node 20 or newer (`node -v`). Inside the folder:
+Needs Node 22 or newer (`node -v`). Inside the folder:
 
 ```bash
 npm install
-npm test                      # should print: # pass 141
+npm test                      # should print: # pass 142
 cp .env.example .env          # then fill in the values from Steps 1–2
 npm run doctor
 ```

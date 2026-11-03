@@ -190,7 +190,7 @@ scripts/doctor.js         checks every setting and source (npm run doctor)
 scripts/ask.js            ask from your terminal, with your real keys (npm run ask)
 scripts/evals.js          runs the evals through the real agent (npm run evals)
 scripts/run-task.js       tries a monitoring task once (npm run task)
-tests/                    npm test: 141 tests, no network, no keys
+tests/                    npm test: 142 tests, no network, no keys
 ```
 
 ## Configuration
@@ -209,7 +209,7 @@ all with defaults. The important ones:
 
 ```bash
 npm install
-npm test                      # 141 tests, no network or keys
+npm test                      # 142 tests, no network or keys
 cp .env.example .env          # fill in what you have
 npm run doctor                # checks settings, Telegram token, model, repos, sources
 npm run ask -- "question"     # ask from the terminal, with your real keys

@@ -1,6 +1,6 @@
 # GQuants Agent (Telegram bot). Node only. `tar` is not needed any more: repo
 # snapshots are read in-process from GitHub's tarball.
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./

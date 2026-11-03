@@ -5,7 +5,7 @@
   "description": "GQuants Agent: a Telegram bot that answers questions about the team's projects (read-only) and about anything else.",
   "main": "server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node server.js",
