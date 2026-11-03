@@ -139,10 +139,15 @@ test("read_file: traversal, absolute, URL, home, NUL and backslash paths are rej
   assert.equal(ok.commit, "deadbeefcafe");
 });
 
-test("snapshot: symlinks are not followed, secret files are dropped, credentials redacted, vendored dirs skipped", async () => {
+test("snapshot: symlinks are not followed, secret files are dropped, credentials redacted, vendored dirs skipped", async (t) => {
   const dir = tmpRepo(SAMPLE);
-  fs.symlinkSync("/etc/passwd", path.join(dir, "passwd-link"));
-  fs.symlinkSync("/etc", path.join(dir, "etc-dir-link"));
+  try {
+    fs.symlinkSync("/etc/passwd", path.join(dir, "passwd-link"));
+    fs.symlinkSync("/etc", path.join(dir, "etc-dir-link"));
+  } catch (e) {
+    if (e.code === "EPERM") return t.skip("this machine does not allow creating symlinks (normal on Windows without Developer Mode)");
+    throw e;
+  }
   const store = new SnapshotStore({ projects: PROJECTS, log: () => {} });
   const s = await store.loadFromDir("busybee", dir, "x");
   const paths = [...s.files.keys()];

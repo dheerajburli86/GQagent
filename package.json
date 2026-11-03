@@ -16,9 +16,9 @@
     "task": "node scripts/run-task.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.45.4",
+    "@supabase/supabase-js": "^2.118.0",
     "fflate": "^0.8.3",
-    "mathjs": "13.2.3",
+    "mathjs": "^15.2.0",
     "unpdf": "2.1.0"
   }
 }
