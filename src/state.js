@@ -154,6 +154,17 @@ Object.assign(Store.prototype, {
   },
 });
 
+// ---- audit log of changes made to project data through the assistant (last 500) --------
+Object.assign(Store.prototype, {
+  addAudit(e) {
+    this.data.audit = this.data.audit || [];
+    this.data.audit.push({ at: new Date().toISOString(), ...e });
+    if (this.data.audit.length > 500) this.data.audit = this.data.audit.slice(-500);
+    this.save();
+  },
+  recentAudit(n = 15) { return (this.data.audit || []).slice(-n).reverse(); },
+});
+
 /** In-RAM sliding-window limiter: N messages per minute per person. */
 class RateLimiter {
   constructor(perMin) { this.perMin = perMin; this.hits = new Map(); }

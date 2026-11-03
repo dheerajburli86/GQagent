@@ -75,6 +75,15 @@ anything in our projects, and give BusyBee work just by saying it:
 - "Mark my 'Fix tile' task as done" · "Move my deadline request…" (BusyBee's usual rules apply)
 - "What alerts did FinXray send today?" · "Did last night's heatmap refresh fail?"
 
+## Changing things
+
+Say what you want, in plain words:
+- "Add TCS to my watchlist" · "Remove Wipro from watchlist 1" (your own dashboard lists)
+- "Mark the TCS alerts in FinXray as reviewed": the bot shows exactly what will change; **nothing happens until you tap Yes**
+- "Assign Ravi a task..." (BusyBee)
+
+If it can't do something, it tells you "I can't do that" and why. For example it can't change code or deploy, and only admins can delete or change many rows.
+
 ## Good to know
 
 - It gives facts and sources, not buy or sell advice.

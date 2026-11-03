@@ -8,8 +8,11 @@ projects (their code, docs, commit history and, where selected, live market
 data), searches the web, reads PDFs and CSVs you send, does exact calculations,
 and answers general questions in English, Hindi or Hinglish.
 
-It is **read-only**. It cannot change code, data or anything else. It gives no
-buy, sell or hold advice and no price targets.
+It **reads** everything it is connected to, and **changes** only what it can change
+safely: BusyBee tasks (through BusyBee's own rules), rows in the heatmap and FinXray
+databases (only after the person taps Confirm), and the asker's own dashboard
+watchlists. It never changes code or servers. When it can't do something it says so,
+with the reason. It gives no buy, sell or hold advice and no price targets.
 
 **Setup and deployment: see [DEPLOY.md](DEPLOY.md).**
 
@@ -114,10 +117,20 @@ Anyone allowed can create a task in a chat, in plain words ("keep an eye on…",
   `TELEGRAM_ALLOWED_GROUP_IDS`, `TELEGRAM_ADMIN_USER_IDS`. With no admin list,
   everyone can change stock lists and use `/status`. See DEPLOY.md, "Restricting access".
 
-### Read-only, by construction
+### What it can change, and how that is kept safe
 
-- There are no write tools. The only database access is a read-only wrapper
-  (`src/readonly.js`), with an allowlist of tables and read functions.
+- **Reading** uses SELECT only (`src/projectdb.js`, `src/tools/database.js`).
+- **`project_change`** (heatmap, FinXray) never writes when called: it checks the table
+  and columns, counts the rows, and asks the person to tap **Confirm**. Only that
+  person's tap runs it, once, within 10 minutes, after re-counting the rows (if the data
+  moved it refuses). Updates and deletes need a `where`; at most 100 rows; deletes and
+  more than 10 rows need a BusyBee admin or supervisor; credential tables and columns are
+  never touched. Not offered in scheduled runs.
+- **BusyBee** is changed only through its own API as the asker (`busybee_create_task`,
+  `busybee_update_task`), so its permissions and alerts apply. Never directly in its tables.
+- **`dashboard_watchlist`** touches only the asker's own dashboard lists (matched by e-mail).
+- Every change is in the audit log (`/changes`) and the server log.
+- **Never, by design:** code, git, deploys, servers, schemas, keys, other people's data.
 - Repo tools read in-memory copies. They never touch the filesystem, spawn
   processes or run git. Snapshots skip symlinks, `.env` and key files, and mask
   credential-looking strings.
@@ -168,7 +181,8 @@ src/
   projects.js             the four projects
   snapshots.js            GitHub tarball → in-memory index (+ secret filtering)
   documents.js            PDF/CSV/text extraction and table analysis
-  readonly.js             read-only database wrapper
+  readonly.js             read-only database wrapper (the heatmap market tools)
+  tools/dbwrite.js        project_change (confirm first), dashboard_watchlist, audit
   providers/              deepinfra.js (any OpenAI-compatible endpoint: DeepInfra, xAI Grok), index.js
   tools/research.js       web_research (xAI Grok, Responses API with web search)
   tools/schedule_tools.js schedule_task, list_scheduled_tasks, manage_scheduled_task (live chats only)
@@ -190,7 +204,7 @@ scripts/doctor.js         checks every setting and source (npm run doctor)
 scripts/ask.js            ask from your terminal, with your real keys (npm run ask)
 scripts/evals.js          runs the evals through the real agent (npm run evals)
 scripts/run-task.js       tries a monitoring task once (npm run task)
-tests/                    npm test: 142 tests, no network, no keys
+tests/                    npm test: 150 tests, no network, no keys
 ```
 
 ## Configuration
@@ -209,7 +223,7 @@ all with defaults. The important ones:
 
 ```bash
 npm install
-npm test                      # 142 tests, no network or keys
+npm test                      # 150 tests, no network or keys
 cp .env.example .env          # fill in what you have
 npm run doctor                # checks settings, Telegram token, model, repos, sources
 npm run ask -- "question"     # ask from the terminal, with your real keys

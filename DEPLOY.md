@@ -122,7 +122,7 @@ Needs Node 22 or newer (`node -v`). Inside the folder:
 
 ```bash
 npm install
-npm test                      # should print: # pass 142
+npm test                      # should print: # pass 150
 cp .env.example .env          # then fill in the values from Steps 1–2
 npm run doctor
 ```
@@ -359,3 +359,18 @@ who asked, so BusyBee's own permissions and alerts apply.
    `BUSYBEE_AGENT_SECRET=<the same secret>`.
 5. `npm run doctor` shows the databases, the number of linked team members, and whether
    BusyBee answers.
+
+## Changing data from Telegram (and when it says no)
+
+Team members (Telegram linked in BusyBee) can ask the bot to change things. What happens:
+
+| Ask | What the bot does |
+|---|---|
+| "Assign Asha a task..." | Creates it in BusyBee through BusyBee's own rules and alerts. |
+| "Add TCS to my watchlist" | Adds it to the asker's own watchlist on the dashboard (matched by e-mail). Immediately. |
+| "Mark the TCS alerts in FinXray as reviewed" | Shows exactly what will change and two buttons. Nothing happens until **the asker** taps **Yes**. |
+| "Delete those rows" / "update 50 rows" | Only a BusyBee admin or supervisor; otherwise it says so and why. |
+| "Change the code" / "deploy" / "restart Railway" | "I can't do that" with the reason, and what to do instead. |
+
+`/changes` lists the last changes made through the bot. Nothing extra to configure: the
+database keys you already set are used, and the bot never touches credential tables.

@@ -5,6 +5,7 @@ const { check, label } = require("./access");
 const { PROJECTS, IDS, byId } = require("./projects");
 const { runAgent } = require("./agent");
 const { parseEngines, runWithEngines, LABEL: ENGINE_LABEL } = require("./engines");
+const dbwrite = require("./tools/dbwrite");
 const { buildTools } = require("./tools/index");
 const { buildSystemPrompt, withProjectsFooter } = require("./prompt");
 const { toTelegramMessages, esc } = require("./format");
@@ -62,6 +63,7 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
 /list add india-holdings Titan, Bajaj Finance  (also create, remove, set, delete)
 /task add daily 08:30 | what to watch  (also run, pause, resume, delete, schedule, edit)
 /status  model, data and spend
+/changes  the last changes made through me
 /refresh  reload the project code`;
 
 class Bot {
@@ -69,6 +71,7 @@ class Bot {
     Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team });
     // engines: { deepinfra, grok }. Without them (older callers, tests) the one provider is DeepInfra.
     this._engines = engines;
+    this.pending = new dbwrite.PendingChanges(); // changes waiting for the person to tap Confirm (RAM only)
     this.me = null;
     this.queues = new Map();   // chatId -> promise chain (one question at a time per chat)
     this.history = new Map();  // chatId -> [{role, content}] (RAM only)
@@ -174,6 +177,10 @@ class Bot {
         return this.showProjects(chatId);
       case "/brief":
         return this.enqueue(chatId, () => this.ask(m, { text: BRIEF_PROMPT, attachments: [], access, projects: this.liveOn ? ["heatmap-dashboard"] : [] }));
+      case "/changes": {
+        const rows = this.store.recentAudit(10);
+        return this.reply(m, rows.length ? `Recent changes made through me:\n\n${rows.map((r) => `${String(r.at).slice(0, 16).replace("T", " ")} UTC · ${r.by || "?"} · ${r.summary || `${r.action} ${r.project}.${r.table}`}${r.ok === false ? " (failed)" : ""}`).join("\n")}` : "No changes have been made through me yet.");
+      }
       case "/tasks":
       case "/updates":
       case "/alerts":
@@ -309,6 +316,35 @@ class Bot {
       default:
         return this.tg.answerCallback(cq.id);
     }
+  }
+
+  // ---------------------------------------------------------------- confirmed changes
+  async askToConfirm(chatId, id, replyTo) {
+    const p = this.pending.peek(id);
+    if (!p) return;
+    await this.tg.sendPlain(chatId, `⚠️ Please confirm this change\n\n${dbwrite.summarise(p)}${p.reason ? `\n\nWhy: ${p.reason}` : ""}\n\nNothing has changed yet. Only ${p.by} can confirm. This request expires in 10 minutes.`, {
+      reply_to_message_id: replyTo,
+      reply_markup: { inline_keyboard: [[{ text: "✅ Yes, make this change", callback_data: `w:ok:${id}` }, { text: "Cancel", callback_data: `w:no:${id}` }]] },
+    }).catch(() => {});
+  }
+
+  async onChangeButton(cq, chat, action, id) {
+    const p = this.pending.peek(id);
+    if (!p) { await this.tg.answerCallback(cq.id, "This request has expired. Ask me again."); return this.tg.editKeyboard(chat.id, cq.message.message_id, { inline_keyboard: [] }); }
+    if (String(cq.from.id) !== String(p.telegramId)) return this.tg.answerCallback(cq.id, `Only ${p.by} can confirm this.`);
+    const finish = (text) => this.tg.call("editMessageText", { chat_id: chat.id, message_id: cq.message.message_id, text, disable_web_page_preview: true, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+    if (action === "no") {
+      this.pending.take(id);
+      await this.tg.answerCallback(cq.id, "Cancelled");
+      return finish(`Cancelled. Nothing was changed.\n\n${dbwrite.summarise(p)}`);
+    }
+    if (action !== "ok") return this.tg.answerCallback(cq.id);
+    this.pending.take(id);
+    await this.tg.answerCallback(cq.id, "Working…");
+    const r = await dbwrite.execute(p, this.projectDbs);
+    this.store.addAudit({ project: p.project, table: p.table, action: p.action, count: p.count, by: p.by, telegramId: p.telegramId, summary: dbwrite.summarise(p).split("\n")[0], ok: r.ok, ...(r.ok ? {} : { error: r.error }) });
+    this.log(`[change] ${p.by} ${p.action} ${p.project}.${p.table} rows=${p.count} ok=${r.ok}${r.ok ? "" : ` error=${String(r.error).slice(0, 120)}`}`);
+    return finish(r.ok ? `✅ Done: ${p.action === "insert" ? "added" : p.action === "update" ? "changed" : "deleted"} ${r.rows} row${r.rows === 1 ? "" : "s"} in ${p.project} › ${p.table}.` : `❌ Not changed: ${r.error}`);
   }
 
   // ---------------------------------------------------------------- watchlists
@@ -477,6 +513,10 @@ class Bot {
       if (!this.runner) return this.tg.answerCallback(cq.id);
       return this.onTaskButton(cq, chat, access, action, id);
     }
+    if (data.startsWith("w:")) {
+      const [, action, id] = data.split(":");
+      return this.onChangeButton(cq, chat, action, id);
+    }
     if (!data.startsWith("p:")) return this.tg.answerCallback(cq.id);
     const arg = data.slice(2);
     if (arg === "done") {
@@ -559,6 +599,8 @@ class Bot {
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const ctx = {
       projectDbs: this.projectDbs, member, openData: this.cfg.projectDataAccess === "everyone", busybeeApi,
+      pending: scheduled ? null : this.pending, changeQueue: [],
+      recordChange: (e) => { this.store.addAudit(e); this.log(`[change] ${e.by || "?"} ${e.action} ${e.project}.${e.table}: ${e.summary}`); },
       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken, // repo tools read ctx.store = the snapshot store
       attachments: attached, fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
       lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
@@ -570,7 +612,7 @@ class Bot {
       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled }),
         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
         ctx, history: hist, message: text,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
@@ -585,6 +627,8 @@ class Bot {
       for (const html of toTelegramMessages(answer)) {
         await this.tg.sendMessage(chatId, html, { reply_to_message_id: m.message_id }).catch(async () => this.tg.sendPlain(chatId, html.replace(/<[^>]+>/g, "")));
       }
+      // Changes proposed during this answer: ask for a tap before anything is written.
+      for (const id of ctx.changeQueue) await this.askToConfirm(chatId, id, m.message_id);
       this.log(`[answer] user=${userId} projects=${[...ctx.projectsUsed].join(",") || "-"} steps=${out.steps.length} ms=${Date.now() - started}`);
     } catch (e) {
       const msg = e instanceof BudgetError || e instanceof HttpError || e.userFacing ? e.message : "Sorry, I couldn't finish that one. Please try again, or ask in a simpler or shorter way.";

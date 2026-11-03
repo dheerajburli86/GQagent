@@ -27,7 +27,7 @@ const readTool = {
 
 const editTool = {
   name: "edit_watchlist",
-  description: "Create or change a team watchlist (admins only). Use it when an admin asks to add, remove or replace holdings or companies in a list, or to create, describe or delete a list. Items are short strings: company name plus ticker and market where known, e.g. 'HDFC Bank (NSE: HDFCBANK)', 'ASML (NASDAQ: ASML)', 'Indian private banks (sector)', 'Japan (macro)'. Confirm the resulting list to the user.",
+  description: "Create or change one of the TEAM'S lists saved inside this assistant (not anyone's watchlist on the heatmap dashboard website, which this assistant cannot change). Use it only when the person clearly asks for the team's list (e.g. 'our India holdings') and use it when an admin asks to add, remove or replace holdings or companies in a list, or to create, describe or delete a list. Items are short strings: company name plus ticker and market where known, e.g. 'HDFC Bank (NSE: HDFCBANK)', 'ASML (NASDAQ: ASML)', 'Indian private banks (sector)', 'Japan (macro)'. Confirm the resulting list to the user.",
   parameters: {
     type: "object",
     properties: {

@@ -130,3 +130,13 @@ test("simple: a slow answer gets a short 'looking into it' note, removed when th
   assert.ok(w.calls.some((c) => c.method === "deleteMessage"), "the note is removed");
   assert.equal(w.sent().at(-1).text, "Done.");
 });
+
+test("honesty: the prompt forbids claiming an action no tool confirmed, and demands a plain 'I can't' with a reason", () => {
+  const { buildSystemPrompt } = require("../src/prompt.js");
+  const sys = buildSystemPrompt({ user: {}, selected: [], toolNames: ["edit_watchlist"] });
+  assert.match(sys, /Never say you added, changed, saved[\s\S]*unless a tool result in THIS conversation confirmed it/);
+  assert.match(sys, /"I can't do that", then the real reason/);
+  assert.match(sys, /What you CANNOT do, and why: change code/);
+  const t = require("../src/tools/watchlists.js").editTool;
+  assert.match(t.description, /not anyone's watchlist on the heatmap dashboard website/);
+});
