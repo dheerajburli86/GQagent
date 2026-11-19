@@ -49,7 +49,7 @@ test("web_research: declared only with a Grok key; calls the Responses API with 
   const r = await live.run({ question: "What is the RBI repo rate?" }, ctx);
   assert.equal(url, research.RESPONSES_URL);
   assert.equal(auth, "Bearer XAI");
-  assert.deepEqual(body.tools, [{ type: "web_search" }]);
+  assert.deepEqual(body.tools, [{ type: "web_search", excluded_domains: ["x.com", "twitter.com", "t.co"] }], "X/Twitter is excluded from the search");
   assert.equal(body.model, "grok-4.3");
   assert.equal(r.answer, "The repo rate is 5.50%.");
   assert.deepEqual(r.sources, [{ title: "RBI", url: "https://rbi.org.in/x" }], "duplicate links are merged");
@@ -93,4 +93,13 @@ test("hybrid: DeepInfra runs the conversation, calls web_research (Grok), and th
   assert.ok(seen[0].tools.some((t) => t.name === "web_research"), "the model was offered the research tool");
   assert.equal(r.usage.in, 60, "model input 10 + 20, research input 30: all counted");
   assert.equal(r.usage.out, 19);
+});
+
+test("web_research: an answer or citation that uses X/Twitter is refused", async () => {
+  const xCite = research.makeTool({ apiKey: "k", model: "m", fetchImpl: async () => ok({ output: [{ type: "message", content: [{ type: "output_text", text: "Markets rose.", annotations: [{ type: "url_citation", url: "https://x.com/someone/status/1", title: "post" }] }] }] }) });
+  assert.match((await xCite.run({ question: "x" }, {})).error, /X\/Twitter/);
+  const xText = research.makeTool({ apiKey: "k", model: "m", fetchImpl: async () => ok({ output: [{ type: "message", content: [{ type: "output_text", text: "As posted on twitter.com/foo, it rose.", annotations: [] }] }] }) });
+  assert.match((await xText.run({ question: "x" }, {})).error, /X\/Twitter/);
+  const web = research.makeTool({ apiKey: "k", model: "m", fetchImpl: async () => ok({ output: [{ type: "message", content: [{ type: "output_text", text: "RBI held rates.", annotations: [{ type: "url_citation", url: "https://rbi.org.in/a", title: "RBI" }] }] }] }) });
+  assert.equal((await web.run({ question: "x" }, {})).answer, "RBI held rates.");
 });
