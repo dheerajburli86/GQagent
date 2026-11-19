@@ -21,7 +21,7 @@ const { buildLiveClients } = require("../src/tools/live");
 
 (async () => {
   const provider = createProvider(cfg);
-  if (!provider) { console.error("DEEPINFRA_API_KEY is not set."); process.exit(1); }
+  if (!provider) { console.error("XAI_API_KEY is not set."); process.exit(1); }
   const onlyArg = process.argv.indexOf("--only");
   const only = onlyArg > 0 ? new Set(process.argv[onlyArg + 1].split(",").map(Number)) : null;
   const qs = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "evals", "questions.json"), "utf8")).filter((q) => !only || only.has(q.id));

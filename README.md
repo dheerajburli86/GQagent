@@ -25,7 +25,7 @@ with the reason. It gives no buy, sell or hold advice and no price targets.
 | Live market data (if enabled) | "Top 10 Indian stocks by 1-month return, with the as-of date" |
 | Files you send | PDF, Excel (.xlsx, every sheet), Word (.docx), PowerPoint (.pptx), CSV, text, code; remembered for follow-up questions |
 | The web | "What did RBI announce at its latest policy meeting?" |
-| Choosing the AI | untagged → DeepInfra · `@grok …` → Grok with live web search · `@grok @deepinfra …` → both, merged by DeepInfra into one answer |
+| The AI | Grok (xAI) answers everything, from our databases, the live web (Grok search), or both |
 | Every project's live data | "Who has overdue tasks in BusyBee?" · "What alerts did FinXray send today?" · "Which heatmap pipeline failed last night?" (team members) |
 | BusyBee actions | "Assign Asha a task to update the Q3 deck by Friday 5 pm" · "Mark my Fix tile task done" |
 | Company filings | "Latest concall transcript of HDFC Bank: key points" · "NVIDIA's last 6 quarters of revenue and operating cash flow from its SEC filings" |
@@ -49,7 +49,7 @@ bot.js     who may ask (allowlist by Telegram user ID, listed groups only),
    │
    ▼
 agent.js   the tool loop: model → tool calls → results → model … (step, time and budget limits)
-   │        model: DeepInfra google/gemini-2.5-flash (optional fallback model, same key)
+   │        model: xAI Grok (AGENT_GROK_MODEL, default grok-4.3; optional fallback model, same key)
    ▼
 tools (built per question; tools for unselected projects are never offered)
    research  web_research: a sourced answer from xAI Grok's web search (only with XAI_API_KEY)
@@ -183,14 +183,14 @@ src/
   documents.js            PDF/CSV/text extraction and table analysis
   readonly.js             read-only database wrapper (the heatmap market tools)
   tools/dbwrite.js        project_change (confirm first), dashboard_watchlist, audit
-  providers/              deepinfra.js (any OpenAI-compatible endpoint: DeepInfra, xAI Grok), index.js
+  providers/              openai_compat.js (xAI Grok chat endpoint), index.js
   tools/research.js       web_research (xAI Grok, Responses API with web search)
   tools/schedule_tools.js schedule_task, list_scheduled_tasks, manage_scheduled_task (live chats only)
   projectdb.js            one read handle per project database; credential tables/columns never read
   team.js                 team member = Telegram linked in BusyBee
   tools/database.js       project_tables, project_query (SELECT only)
   tools/busybee.js        busybee_create_task / _update_task via BusyBee's API
-  engines.js              @grok / @deepinfra / both: picks the AI, runs both in parallel, merges
+  engines.js              runs the question on Grok, with web_research always available
   tools/filings.js        company_filings (NSE, BSE, SEC EDGAR)
   tools/macro.js          macro_news (country list from the dashboard, official-source queries)
   tools/watchlists.js     watchlists, edit_watchlist
@@ -215,9 +215,9 @@ all with defaults. The important ones:
 | Required | Variable |
 |---|---|
 | yes | `TELEGRAM_BOT_TOKEN` |
-| yes | `DEEPINFRA_API_KEY` |
-| recommended | `XAI_API_KEY`, `GITHUB_READ_TOKEN`, `DATA_DIR` (`/data` on Railway), `SEC_USER_AGENT` (`Company name contact@email`, for SEC EDGAR) |
-| optional | `TASKS_ENABLED` and the other `TASK_*` limits, `XAI_API_KEY` (used only for @grok / @grok @deepinfra messages), `AGENT_GROK_MODEL`, access locks (`TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_ALLOWED_GROUP_IDS`, `TELEGRAM_ADMIN_USER_IDS`), `FILE_MEMORY_HOURS`, `HEATMAP_SUPABASE_URL` + `HEATMAP_SUPABASE_KEY` (live market data, read-only), `AGENT_MODEL`, `AGENT_FALLBACK_MODEL`, budgets and limits |
+| yes | `XAI_API_KEY` |
+| recommended | `GITHUB_READ_TOKEN`, `DATA_DIR` (`/data` on Railway), `SEC_USER_AGENT` (`Company name contact@email`, for SEC EDGAR) |
+| optional | `TASKS_ENABLED` and the other `TASK_*` limits, `AGENT_GROK_MODEL`, `AGENT_GROK_RESEARCH_MODEL`, access locks (`TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_ALLOWED_GROUP_IDS`, `TELEGRAM_ADMIN_USER_IDS`), `FILE_MEMORY_HOURS`, `HEATMAP_SUPABASE_URL` + `HEATMAP_SUPABASE_KEY` (live market data, read-only), `AGENT_FALLBACK_MODEL`, budgets and limits |
 
 ## Develop
 

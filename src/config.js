@@ -15,16 +15,13 @@ function load(e = process.env) {
     adminUserIds: new Set(ids(e.TELEGRAM_ADMIN_USER_IDS)),
     allowedGroupIds: new Set(ids(e.TELEGRAM_ALLOWED_GROUP_IDS)),
 
-    // --- Model: DeepInfra is the only model provider
-    deepinfraKey: e.DEEPINFRA_API_KEY || "",
-    deepinfraUrl: e.DEEPINFRA_API_URL || "https://api.deepinfra.com/v1/openai/chat/completions", // only changed for local testing
-    model: e.AGENT_MODEL || "google/gemini-2.5-flash",
-    fallbackModel: e.AGENT_FALLBACK_MODEL || "",
-    // xAI Grok (optional). Used as the main model when AGENT_PROVIDER=grok, and for the
-    // web_research tool (a sourced web search) whenever the key is set.
-    agentProvider: (e.AGENT_PROVIDER || "deepinfra").toLowerCase(),
+    // --- Model: xAI Grok is the only model provider (one key). It answers every
+    // question and runs the web_research tool (Grok's live web search).
     xaiKey: e.XAI_API_KEY || "",
+    grokUrl: e.XAI_API_URL || "https://api.x.ai/v1/chat/completions", // only changed for local testing
     grokModel: e.AGENT_GROK_MODEL || "grok-4.3",
+    model: e.AGENT_GROK_MODEL || "grok-4.3",
+    fallbackModel: e.AGENT_FALLBACK_MODEL || "",
     grokResearchModel: e.AGENT_GROK_RESEARCH_MODEL || e.AGENT_GROK_MODEL || "grok-4.3",
     maxOutputTokens: int(e.AGENT_MAX_OUTPUT_TOKENS, 8192),
 

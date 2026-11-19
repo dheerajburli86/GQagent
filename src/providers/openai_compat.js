@@ -1,8 +1,7 @@
 "use strict";
-// DeepInfra's OpenAI-compatible chat endpoint. The default model is
-// google/gemini-2.5-flash, served by DeepInfra, so the one DeepInfra key is the
-// only model credential the service needs.
-const URL_ = "https://api.deepinfra.com/v1/openai/chat/completions";
+// xAI Grok's OpenAI-compatible chat endpoint (function calling). XAI_API_KEY is
+// the only model credential the service needs.
+const URL_ = "https://api.x.ai/v1/chat/completions";
 
 function toMessages(system, messages) {
   const out = [{ role: "system", content: system }];
@@ -41,8 +40,8 @@ class ProviderError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-/** Any OpenAI-compatible chat endpoint: DeepInfra (default) or xAI Grok (url, name). */
-function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelayMs = 800, url = URL_, name = "deepinfra" }) {
+/** An OpenAI-compatible chat endpoint; xAI Grok by default. */
+function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelayMs = 800, url = URL_, name = "grok" }) {
   async function chat({ system, messages, tools, temperature = 0.3 }) {
     const body = { model, messages: toMessages(system, messages), temperature, max_tokens: maxTokens };
     if (tools && tools.length) { body.tools = toTools(tools); body.tool_choice = "auto"; }
@@ -57,13 +56,13 @@ function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelay
           signal: AbortSignal.timeout(90000),
         });
       } catch (e) {
-        last = new ProviderError(`DeepInfra request failed: ${String(e.message || e).slice(0, 200)}`, 0);
+        last = new ProviderError(`xAI request failed: ${String(e.message || e).slice(0, 200)}`, 0);
         await new Promise((r) => setTimeout(r, retryDelayMs * (i + 1)));
         continue;
       }
       if (res.ok) { j = await res.json(); break; }
       const txt = await res.text().catch(() => "");
-      last = new ProviderError(`DeepInfra ${res.status}: ${txt.slice(0, 300)}`, res.status);
+      last = new ProviderError(`xAI ${res.status}: ${txt.slice(0, 300)}`, res.status);
       if (res.status !== 429 && res.status < 500) throw last;
       await new Promise((r) => setTimeout(r, retryDelayMs * (i + 1)));
     }

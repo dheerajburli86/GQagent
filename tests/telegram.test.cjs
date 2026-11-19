@@ -20,7 +20,7 @@ const TOKEN = "123456:ABCdefGHIjklMNOpqrSTUvwxYZ-1234567890";
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "gqa-"));
 const CFG = (over = {}) => cfgMod.load({
   TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_ALLOWED_USER_IDS: "111, 222", TELEGRAM_ADMIN_USER_IDS: "111",
-  TELEGRAM_ALLOWED_GROUP_IDS: "-100500", DEEPINFRA_API_KEY: "k", DATA_DIR: tmp(), AGENT_RATE_PER_MIN: "100",
+  TELEGRAM_ALLOWED_GROUP_IDS: "-100500", XAI_API_KEY: "k", DATA_DIR: tmp(), AGENT_RATE_PER_MIN: "100",
   AGENT_DAILY_TOKENS_PER_USER: "400000", AGENT_MONTHLY_TOKENS: "30000000", BRIEF_CHAT_ID: "", ...over,
 });
 
@@ -203,7 +203,7 @@ function world({ cfg = CFG(), modelReply, files = {}, now } = {}) {
   const ready = Promise.all(PROJECTS.map((p) => snapshots.loadFromDir(p.id, fixtureRepo(dir, p.id), "abc1234def5678")));
   const prompts = [];
   let turn = 0;
-  const provider = { name: "deepinfra", model: "google/gemini-2.5-flash", chat: async (a) => {
+  const provider = { name: "grok", model: "grok-4.3", chat: async (a) => {
     prompts.push(a);
     if (modelReply) return modelReply(a, turn++);
     return { text: "Answer from the model.", toolCalls: [], usage: { in: 100, out: 20 } };
@@ -392,11 +392,11 @@ test("bot: an over-budget person gets the allowance message and the model is nev
 });
 
 test("bot: a model failure shows a plain apology, never the error details", async () => {
-  const w = world({ modelReply: () => { throw new Error("DeepInfra 500: internal details with " + TOKEN); } });
+  const w = world({ modelReply: () => { throw new Error("xAI 500: internal details with " + TOKEN); } });
   await w.bot.handle({ update_id: 25, message: msg({ text: "hi" }) });
   const last = w.sent.at(-1).text;
   assert.match(last, /couldn't finish that one/);
-  assert.ok(!last.includes("DeepInfra") && !last.includes(TOKEN));
+  assert.ok(!last.includes("xAI 500") && !last.includes(TOKEN));
 });
 
 test("bot: the per-person rate limit refuses bursts", async () => {

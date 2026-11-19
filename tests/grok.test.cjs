@@ -10,31 +10,24 @@ const { buildSystemPrompt } = require("../src/prompt.js");
 const ok = (j) => new Response(JSON.stringify(j), { status: 200, headers: { "content-type": "application/json" } });
 const reply = (text = "ok") => ({ choices: [{ message: { content: text }, finish_reason: "stop" }], usage: { prompt_tokens: 3, completion_tokens: 2 } });
 
-test("config: Grok is optional; DeepInfra stays the default main model", () => {
+test("config: Grok is the only model; research model follows it unless set", () => {
   const c = cfgMod.load({});
-  assert.equal(c.agentProvider, "deepinfra");
   assert.equal(c.xaiKey, "");
+  assert.equal(c.grokModel, "grok-4.3");
   assert.equal(c.grokResearchModel, "grok-4.3");
-  assert.equal(cfgMod.load({ AGENT_GROK_MODEL: "grok-x", XAI_API_KEY: "k" }).grokResearchModel, "grok-x", "research model follows the Grok model unless set");
+  assert.equal(cfgMod.load({ AGENT_GROK_MODEL: "grok-x", XAI_API_KEY: "k" }).grokResearchModel, "grok-x");
+  assert.equal(c.deepinfraKey, undefined, "no DeepInfra setting any more");
 });
 
-test("providers: default is DeepInfra; AGENT_PROVIDER=grok uses xAI's chat endpoint; a missing key falls back to the other", async () => {
-  let url, auth;
-  const f = async (u, o) => { url = u; auth = o.headers.authorization; return ok(reply("hi")); };
-  const dInfra = createProvider(cfgMod.load({ DEEPINFRA_API_KEY: "d" }), f);
-  assert.equal(dInfra.name, "deepinfra");
-  await dInfra.chat({ system: "s", messages: [{ role: "user", content: "q" }], tools: [] });
-  assert.match(url, /api\.deepinfra\.com/); assert.equal(auth, "Bearer d");
-
-  const grok = createProvider(cfgMod.load({ DEEPINFRA_API_KEY: "d", XAI_API_KEY: "x", AGENT_PROVIDER: "grok", AGENT_GROK_MODEL: "grok-4.3" }), f);
-  assert.equal(grok.name, "grok>deepinfra");
-  assert.equal(grok.model, "grok-4.3");
-  await grok.chat({ system: "s", messages: [{ role: "user", content: "q" }], tools: [] });
-  assert.equal(url, GROK_URL); assert.equal(auth, "Bearer x");
-
-  const onlyGrok = createProvider(cfgMod.load({ XAI_API_KEY: "x", AGENT_PROVIDER: "deepinfra" }), f);
-  assert.equal(onlyGrok.name, "grok", "no DeepInfra key: Grok is used even if DeepInfra was asked for");
-  assert.equal(createProvider(cfgMod.load({}), f), null, "no keys at all: no provider");
+test("providers: XAI_API_KEY drives xAI's chat endpoint; an optional fallback Grok model; no key, no provider", async () => {
+  let url, auth, model;
+  const f = async (u, o) => { url = u; auth = o.headers.authorization; model = JSON.parse(o.body).model; return ok(reply("hi")); };
+  const g = createProvider(cfgMod.load({ XAI_API_KEY: "x", AGENT_GROK_MODEL: "grok-4.3" }), f);
+  assert.equal(g.name, "grok"); assert.equal(g.model, "grok-4.3");
+  await g.chat({ system: "s", messages: [{ role: "user", content: "q" }], tools: [] });
+  assert.equal(url, GROK_URL); assert.equal(auth, "Bearer x"); assert.equal(model, "grok-4.3");
+  assert.equal(createProvider(cfgMod.load({ DEEPINFRA_API_KEY: "d" }), f), null, "a DeepInfra key alone does nothing now");
+  assert.equal(createProvider(cfgMod.load({}), f), null);
 });
 
 test("web_research: declared only with a Grok key; calls the Responses API with web search; returns the answer and links", async () => {
@@ -74,8 +67,8 @@ test("web_research: failures are readable and never echo the response body; empt
 });
 
 test("prompt: the research tool is described only when it is available", () => {
-  assert.match(buildSystemPrompt({ user: {}, selected: [], toolNames: ["web_research"] }), /web_research for research questions/);
-  assert.ok(!/web_research for research/.test(buildSystemPrompt({ user: {}, selected: [], toolNames: [] })));
+  assert.match(buildSystemPrompt({ user: {}, selected: [], toolNames: ["web_research"] }), /web_research is your main live web search/);
+  assert.ok(!/web_research is your main/.test(buildSystemPrompt({ user: {}, selected: [], toolNames: [] })));
 });
 
 test("hybrid: DeepInfra runs the conversation, calls web_research (Grok), and the answer carries the sources", async () => {

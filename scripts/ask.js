@@ -45,7 +45,7 @@ function loadDotEnv() {
     if (bad.length) { console.error(`Unknown project(s): ${bad.join(", ")}. Use: ${IDS.join(", ")}`); process.exit(1); }
   }
   const provider = createProvider(cfg);
-  if (!provider) { console.error("DEEPINFRA_API_KEY is not set."); process.exit(1); }
+  if (!provider) { console.error("XAI_API_KEY is not set."); process.exit(1); }
   let attached = [];
   if (file) {
     const buf = fs.readFileSync(file);

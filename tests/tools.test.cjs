@@ -1,8 +1,8 @@
-/** DeepInfra provider, keyless web search, calculator. `npm test` (no network, no keys). */
+/** Grok (xAI) provider, keyless web search, calculator. `npm test` (no network, no keys). */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
-const deepinfra = require("../src/providers/deepinfra.js");
+const deepinfra = require("../src/providers/openai_compat.js");
 const { withFallback, createProvider } = require("../src/providers/index.js");
 const search = require("../src/tools/search.js");
 const calc = require("../src/tools/calc.js");
@@ -14,22 +14,22 @@ const USER = { id: "u1", email: "a@gquants.com", isAdmin: false };
 const ok = (j) => new Response(JSON.stringify(j), { status: 200, headers: { "content-type": "application/json" } });
 
 // ---- config / provider ---------------------------------------------------------
-test("config: DeepInfra is the only provider; default model is google/gemini-2.5-flash", () => {
+test("config: Grok is the only provider; default model is grok-4.3", () => {
   const c = cfgMod.load({});
-  assert.equal(c.model, "google/gemini-2.5-flash");
+  assert.equal(c.grokModel, "grok-4.3");
   assert.equal(c.fallbackModel, "");
   assert.equal(createProvider(c), null, "no key -> no provider (service still boots)");
-  const c2 = cfgMod.load({ DEEPINFRA_API_KEY: "k", AGENT_MODEL: "x/y", AGENT_FALLBACK_MODEL: "x/z", AGENT_DAILY_TOKENS_PER_USER: "5" });
+  const c2 = cfgMod.load({ XAI_API_KEY: "k", AGENT_GROK_MODEL: "x/y", AGENT_FALLBACK_MODEL: "x/z", AGENT_DAILY_TOKENS_PER_USER: "5" });
   assert.equal(c2.dailyTokensPerUser, 5);
   const p = createProvider(c2);
   assert.equal(p.model, "x/y");
-  assert.match(p.name, />/);
-  assert.equal(createProvider({ ...c2, fallbackModel: "" }).name, "deepinfra");
+  assert.equal(p.name, "grok");
+  assert.equal(createProvider({ ...c2, fallbackModel: "" }).name, "grok");
 });
 
-test("deepinfra: request shape (model, tools, tool_choice, max_tokens, bearer key) and every real tool schema is valid", async () => {
+test("grok provider: request shape (model, tools, tool_choice, max_tokens, bearer key) and every real tool schema is valid", async () => {
   let body, headers;
-  const d = deepinfra.create({ apiKey: "KEY", model: "google/gemini-2.5-flash", maxTokens: 4096, fetchImpl: async (u, o) => { body = JSON.parse(o.body); headers = o.headers; assert.equal(u, "https://api.deepinfra.com/v1/openai/chat/completions"); return ok({ choices: [{ message: { content: "hi" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }); } });
+  const d = deepinfra.create({ apiKey: "KEY", model: "google/gemini-2.5-flash", maxTokens: 4096, fetchImpl: async (u, o) => { body = JSON.parse(o.body); headers = o.headers; assert.equal(u, "https://api.x.ai/v1/chat/completions"); return ok({ choices: [{ message: { content: "hi" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }); } });
   const attached = [{ name: "a.pdf", kind: "pdf", text: "x", pages: ["x"] }, { name: "b.csv", kind: "csv", text: "a\n1" }];
   const tools = buildTools({ selected: IDS, user: { ...USER, isAdmin: true }, attached, liveOn: true });
   assert.equal(tools.length, 25); // no task or watchlist writing tools outside a live chat
@@ -50,7 +50,7 @@ test("deepinfra: request shape (model, tools, tool_choice, max_tokens, bearer ke
   }
 });
 
-test("deepinfra: tool messages carry name + id; string and object arguments both parse; empty answer is explained", async () => {
+test("grok provider: tool messages carry name + id; string and object arguments both parse; empty answer is explained", async () => {
   const msgs = deepinfra.toMessages("sys", [{ role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read_file", args: { a: 1 } }] }, { role: "tool", toolCallId: "c1", name: "read_file", content: "{}" }]);
   assert.deepEqual(msgs[2], { role: "tool", tool_call_id: "c1", name: "read_file", content: "{}" });
   const replies = [
@@ -67,7 +67,7 @@ test("deepinfra: tool messages carry name + id; string and object arguments both
   assert.match((await d.chat({ system: "s", messages: [] })).text, /content_filter/);
 });
 
-test("deepinfra: 429/5xx/network errors retry 3 times; 400 does not retry", async () => {
+test("grok provider: 429/5xx/network errors retry 3 times; 400 does not retry", async () => {
   let n = 0;
   const flaky = deepinfra.create({ apiKey: "k", model: "m", retryDelayMs: 1, fetchImpl: async () => { n++; if (n === 1) throw new Error("ECONNRESET"); if (n === 2) return new Response("busy", { status: 429 }); return ok({ choices: [{ message: { content: "ok" } }] }); } });
   assert.equal((await flaky.chat({ system: "s", messages: [] })).text, "ok");

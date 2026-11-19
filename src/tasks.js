@@ -57,8 +57,8 @@ function parseRunReply(text) {
 /** Runs one task once. deps: provider, cfg, store, snapshots, live, liveOn, researchTool, fetchImpl. */
 async function executeTask(task, deps, now = new Date()) {
   const { cfg } = deps;
-  const engines = deps.engines || { deepinfra: deps.provider || null, grok: null };
-  if (!engines.deepinfra && !engines.grok) throw new Error("the model is not configured (DEEPINFRA_API_KEY or XAI_API_KEY)");
+  const engines = deps.engines || { grok: deps.provider || null };
+  if (!engines.grok) throw new Error("the model is not configured (XAI_API_KEY)");
   const selected = Array.isArray(task.projects) ? task.projects : [];
   const ctx = {
     store: deps.snapshots, live: deps.live || {}, selected, githubToken: cfg.githubToken, attachments: [],
@@ -119,7 +119,7 @@ class TaskRunner {
       chatId: String(chatId), createdBy: String(createdBy), createdByLabel: createdByLabel || "",
       title: String(title || text.split(/[.\n]/)[0]).trim().slice(0, 80) || "Monitoring task",
       instruction: text, schedule: schedule.describe(p.spec), mode: m, projects: [...projects],
-      engine: ["grok", "deepinfra", "both"].includes(engine) ? engine : "default",
+      engine: "default",
       nextRunAt: schedule.nextRun(p.spec, this.now()).toISOString(),
     });
     return { task: t };

@@ -200,7 +200,7 @@ function botWorld() {
       ? { text: "", toolCalls: [{ id: "c1", name: "project_change", args: { project: "gq-finxray-us", table: "alerts", action: "update", values: { status: "reviewed" }, where: [{ column: "ticker", op: "eq", value: "TCS" }], reason: "asked by Dheeraj" } }], usage: { in: 1, out: 1 } }
       : { text: "I've prepared the change. Please tap Confirm; nothing has changed yet.", toolCalls: [], usage: { in: 1, out: 1 } };
   } };
-  const bot = new Bot({ cfg, tg: new TelegramClient({ token: "1:x", fetchImpl: f, log: () => {} }), provider, engines: { deepinfra: provider, grok: null }, store, snapshots: new SnapshotStore({ projects: PROJECTS, log: () => {} }), live: {}, limiter: new RateLimiter(100), log: () => {}, projectDbs: w.dbs, team: { available: true, member: async (id) => (String(id) === "777" ? ME : null) } });
+  const bot = new Bot({ cfg, tg: new TelegramClient({ token: "1:x", fetchImpl: f, log: () => {} }), provider, engines: { grok: provider }, store, snapshots: new SnapshotStore({ projects: PROJECTS, log: () => {} }), live: {}, limiter: new RateLimiter(100), log: () => {}, projectDbs: w.dbs, team: { available: true, member: async (id) => (String(id) === "777" ? ME : null) } });
   bot.me = { id: 999, username: "gq_agent_bot" };
   return { bot, w, calls, store };
 }

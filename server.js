@@ -23,7 +23,7 @@ if (!cfg.telegramToken) { console.error("TELEGRAM_BOT_TOKEN is not set (see DEPL
 
 const tg = new TelegramClient({ token: cfg.telegramToken, apiBase: cfg.telegramApiBase, log });
 const provider = createProvider(cfg);
-const engines = require("./src/engines").createEngines(cfg);
+const engines = { grok: provider };
 const store = new Store(cfg.dataDir, log);
 const snapshots = new SnapshotStore({ projects: PROJECTS, token: cfg.githubToken, workDir: os.tmpdir(), maxFileKb: cfg.snapshotMaxFileKb, maxTotalMb: cfg.snapshotMaxTotalMb, log });
 
@@ -42,7 +42,7 @@ const projectDbs = buildProjectDbs(process.env);
 const team = new Team({ busybee: projectDbs.busybee || null, log });
 log(`[agent] project databases: ${Object.keys(projectDbs).join(", ") || "none"}; access: ${cfg.projectDataAccess === "everyone" ? "everyone" : team.available ? "team members (Telegram linked in BusyBee)" : "nobody yet (set BUSYBEE_SUPABASE_URL/KEY to identify team members)"}; BusyBee actions: ${cfg.busybeeAppUrl && cfg.busybeeAgentSecret ? "on" : "off"}`);
 
-if (!provider) log("[agent] DEEPINFRA_API_KEY is not set: the bot will reply that the model is not configured");
+if (!provider) log("[agent] XAI_API_KEY is not set: the bot will reply that the model is not configured");
 if (!cfg.githubToken) log("[agent] GITHUB_READ_TOKEN is not set: private repos cannot be read");
 if (!Object.keys(live).length) log("[agent] HEATMAP_SUPABASE_URL/KEY not set: live market tools are off");
 

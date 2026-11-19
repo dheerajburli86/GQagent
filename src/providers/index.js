@@ -1,16 +1,15 @@
 "use strict";
-// DeepInfra is the only model provider. AGENT_MODEL (default
-// google/gemini-2.5-flash) drives the agent; AGENT_FALLBACK_MODEL, if set, is a
-// second DeepInfra model (same key) tried when a call to the first fails.
-// Messages carry tool calls in a provider-neutral form (`toolCalls`), so a
-// conversation can switch model mid-loop.
-const deepinfra = require("./deepinfra");
+// xAI Grok is the only model provider. AGENT_GROK_MODEL (default grok-4.3)
+// drives the agent; AGENT_FALLBACK_MODEL, if set, is a second Grok model (same
+// key) tried when a call to the first fails with an outage or rate limit.
+// Messages carry tool calls in a provider-neutral form (`toolCalls`).
+const openai = require("./openai_compat");
 
 function withFallback(primary, fallback, log = (m) => console.error(m)) {
   if (!primary) return fallback || null;
   if (!fallback) return primary;
   const p = {
-    name: `${primary.name}>${fallback.name}`,
+    name: primary.name,
     model: primary.model,
     lastModel: primary.model,
     async chat(args) {
@@ -34,20 +33,12 @@ function withFallback(primary, fallback, log = (m) => console.error(m)) {
 
 const GROK_URL = "https://api.x.ai/v1/chat/completions";
 
-/**
- * Returns the main model provider. AGENT_PROVIDER picks the primary: "deepinfra"
- * (default) or "grok". If the chosen one has no key, the other is used. Returns
- * null when neither key is set (the bot boots and says so when asked).
- */
+/** The Grok provider, or null when XAI_API_KEY is not set (the bot boots and says so when asked). */
 function createProvider(cfg, fetchImpl = fetch) {
-  const dInfra = () => cfg.deepinfraKey ? deepinfra.create({ apiKey: cfg.deepinfraKey, model: cfg.model, fetchImpl, maxTokens: cfg.maxOutputTokens, url: cfg.deepinfraUrl }) : null;
-  const grok = () => cfg.xaiKey ? deepinfra.create({ apiKey: cfg.xaiKey, model: cfg.grokModel, fetchImpl, maxTokens: cfg.maxOutputTokens, url: GROK_URL, name: "grok" }) : null;
-  const primary = cfg.agentProvider === "grok" ? (grok() || dInfra()) : (dInfra() || grok());
-  if (!primary) return null;
-  const fallbackOwn = cfg.fallbackModel && cfg.fallbackModel !== cfg.model && primary.name === "deepinfra"
-    ? deepinfra.create({ apiKey: cfg.deepinfraKey, model: cfg.fallbackModel, fetchImpl, maxTokens: cfg.maxOutputTokens, url: cfg.deepinfraUrl }) : null;
-  const other = primary.name === "deepinfra" ? grok() : dInfra();
-  return withFallback(primary, fallbackOwn || other);
+  if (!cfg.xaiKey) return null;
+  const mk = (model) => openai.create({ apiKey: cfg.xaiKey, model, fetchImpl, maxTokens: cfg.maxOutputTokens, url: cfg.grokUrl || GROK_URL, name: "grok" });
+  const backup = cfg.fallbackModel && cfg.fallbackModel !== cfg.grokModel ? mk(cfg.fallbackModel) : null;
+  return withFallback(mk(cfg.grokModel), backup);
 }
 
 module.exports = { withFallback, createProvider, GROK_URL };

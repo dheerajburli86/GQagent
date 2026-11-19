@@ -4,7 +4,7 @@
 const { check, label } = require("./access");
 const { PROJECTS, IDS, byId } = require("./projects");
 const { runAgent } = require("./agent");
-const { parseEngines, runWithEngines, LABEL: ENGINE_LABEL } = require("./engines");
+const { parseEngines, runWithEngines } = require("./engines");
 const dbwrite = require("./tools/dbwrite");
 const { buildTools } = require("./tools/index");
 const { buildSystemPrompt, withProjectsFooter } = require("./prompt");
@@ -45,8 +45,8 @@ I'll send them here. Tap 🔔 <b>My updates</b> to see, pause or remove them.
 <b>Buttons</b>
 📊 Market today · 🔔 My updates · ⭐ Our stocks · ❓ How to use
 
-<b>Choose the AI</b> (optional)
-Normally DeepInfra answers. Add <b>@grok</b> to use Grok and its live web search, or <b>@grok @deepinfra</b> to have both work on it and get one combined answer.
+<b>Ask me anything</b>
+I answer from our own databases and projects, and from a live web search when it needs current information.
 
 I share facts, not buy or sell advice.`;
 
@@ -69,7 +69,7 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
 class Bot {
   constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null }) {
     Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team });
-    // engines: { deepinfra, grok }. Without them (older callers, tests) the one provider is DeepInfra.
+    // engines: { grok }. Without them (older callers, tests) the one provider is used.
     this._engines = engines;
     this.pending = new dbwrite.PendingChanges(); // changes waiting for the person to tap Confirm (RAM only)
     this.me = null;
@@ -79,7 +79,7 @@ class Bot {
     this.liveOn = Object.keys(live || {}).length > 0;
   }
 
-  get engines() { return this._engines || { deepinfra: this.provider || null, grok: null }; }
+  get engines() { return this._engines || { grok: this.provider || null }; }
 
   async init() {
     this.me = await this.tg.getMe();
@@ -133,7 +133,7 @@ class Bot {
     if (quoted && text) text = `(Replying to this earlier message:\n"""\n${quoted.slice(0, 3000)}\n""")\n\n${text}`;
 
     if (!this.limiter.take(String(from.id))) return this.reply(m, "You're sending messages quickly. Give it a minute and try again.");
-    if (!this.engines.deepinfra && !this.engines.grok) { this.log("[bot] no model: set DEEPINFRA_API_KEY or XAI_API_KEY"); return this.reply(m, "I'm not fully set up yet. Please let the admin know."); }
+    if (!this.engines.grok) { this.log("[bot] no model: set XAI_API_KEY"); return this.reply(m, "I'm not fully set up yet. Please let the admin know."); }
     return this.enqueue(chat.id, () => this.ask(m, { text: text || (attachments.length ? "I've sent you a file. Give a short summary of what it is and its key points, then suggest two or three useful things you could do with it." : ""), attachments, access }));
   }
 
@@ -211,8 +211,8 @@ class Bot {
     const cap = (n) => (n > 0 ? n.toLocaleString("en-IN") : "no cap");
     const tasks = this.runner ? this.store.listTasks() : [];
     return [
-      `Model: ${this.provider ? `${this.provider.name}/${this.provider.model}` : "not configured"}${this.cfg.fallbackModel ? ` (fallback ${this.cfg.fallbackModel})` : ""}`,
-      `Web research (Grok): ${this.researchTool ? "on" : "off (no XAI_API_KEY)"}`,
+      `Model: ${this.engines.grok ? `grok/${this.engines.grok.model}` : "not configured (no XAI_API_KEY)"}${this.cfg.fallbackModel ? ` (fallback ${this.cfg.fallbackModel})` : ""}`,
+      `Web research (Grok live search): ${this.researchTool ? "on" : "off (no XAI_API_KEY)"}`,
       `Live market data: ${this.liveOn ? "on" : "off (no HEATMAP_SUPABASE_URL/KEY)"}`,
       `Spend this month: ${this.store.spendThisMonth().toLocaleString("en-IN")} tokens (cap: ${cap(this.cfg.monthlyTokensGlobal)})`,
       `Daily cap per person: ${cap(this.cfg.dailyTokensPerUser)}`,
@@ -237,7 +237,7 @@ class Bot {
     if (action === "updates") return this.updatesView(m);
     if (action === "lists") return this.listCommand(m, "", access);
     if (action === "market") {
-      if (!this.engines.deepinfra && !this.engines.grok) return this.reply(m, "I'm not fully set up yet. Please let the admin know.");
+      if (!this.engines.grok) return this.reply(m, "I'm not fully set up yet. Please let the admin know.");
       return this.enqueue(chatId, () => this.ask(m, { text: this.liveOn ? BRIEF_PROMPT : WEB_BRIEF_PROMPT, attachments: [], access, projects: this.liveOn ? ["heatmap-dashboard"] : [] }));
     }
     return undefined;
@@ -618,11 +618,7 @@ class Bot {
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
         checkBudget: () => this.store.check(userId, this.cfg, this.now()),
       });
-      // Say which AI answered only when the person picked one with a tag.
-      const by = engine === "default" ? "" : out.partial
-        ? `\n\n🤖 ${ENGINE_LABEL[out.engines[0]]} only (the other one failed this time)`
-        : `\n\n🤖 ${ENGINE_LABEL[engine]}`;
-      const answer = withProjectsFooter(out.answer, ctx.projectsUsed, selected) + by;
+      const answer = withProjectsFooter(out.answer, ctx.projectsUsed, selected);
       if (!sysMode) this.remember(chatId, text + (attached.length ? `\n[attached: ${attached.map((d) => d.name).join(", ")}]` : ""), out.answer);
       for (const html of toTelegramMessages(answer)) {
         await this.tg.sendMessage(chatId, html, { reply_to_message_id: m.message_id }).catch(async () => this.tg.sendPlain(chatId, html.replace(/<[^>]+>/g, "")));

@@ -2,7 +2,7 @@
 "use strict";
 // Checks a configuration end to end before (or after) deploying:
 //   node scripts/doctor.js        (reads the environment, or .env next to package.json)
-// Read-only apart from a few hundred model tokens for one DeepInfra call. It
+// Read-only apart from a few hundred model tokens for one Grok call. It
 // does NOT send any Telegram message: it only asks Telegram who the bot is.
 const fs = require("fs");
 const path = require("path");
@@ -24,7 +24,7 @@ const ok = (m) => console.log(`  ✔ ${m}`);
 const bad = (m) => { failed++; console.log(`  ✘ ${m}`); };
 const warn = (m) => { warned++; console.log(`  ! ${m}`); };
 const section = (t) => console.log(`\n${t}`);
-const scrub = (s) => String(s).split(cfg.telegramToken || "\u0000").join("<token>").split(cfg.deepinfraKey || "\u0000").join("<key>");
+const scrub = (s) => String(s).split(cfg.telegramToken || "\u0000").join("<token>").split(cfg.xaiKey || "\u0000").join("<key>");
 
 async function main() {
   section("Settings");
@@ -33,11 +33,9 @@ async function main() {
   if (!cfg.allowedUserIds.size) ok("access: open to anyone who messages the bot (set TELEGRAM_ALLOWED_USER_IDS to restrict it)");
   else ok(`access: limited to ${cfg.allowedUserIds.size} user(s)`);
   if (cfg.allowedGroupIds.size) ok(`groups: limited to ${cfg.allowedGroupIds.size}`);
-  if (!cfg.deepinfraKey) bad("DEEPINFRA_API_KEY is not set: the bot cannot answer");
-  else ok(`DEEPINFRA_API_KEY is set; model ${cfg.model}${cfg.fallbackModel ? `, fallback ${cfg.fallbackModel}` : ""}`);
+  if (!cfg.xaiKey) bad("XAI_API_KEY is not set: the bot cannot answer");
+  else ok(`XAI_API_KEY is set; model ${cfg.grokModel}${cfg.fallbackModel ? `, fallback ${cfg.fallbackModel}` : ""}; research ${cfg.grokResearchModel}`);
   if (!cfg.githubToken) warn("GITHUB_READ_TOKEN is not set: the four repos cannot be read");
-  if (!cfg.xaiKey) warn("XAI_API_KEY not set: no web_research (Grok search); the agent uses its keyless search only");
-  else ok(`XAI_API_KEY is set; research model ${cfg.grokResearchModel}${cfg.agentProvider === "grok" ? " (also the main model)" : ""}`);
   if (!cfg.heatmapSupabaseUrl || !cfg.heatmapSupabaseKey) warn("HEATMAP_SUPABASE_URL/KEY not set: live market data questions will be answered from knowledge only");
   ok(`scheduled tasks ${cfg.tasksEnabled ? `on (up to ${cfg.taskConcurrency} at once, shortest interval ${cfg.taskMinIntervalMinutes} min)` : "OFF (TASKS_ENABLED=false)"}`);
   ok(`spend caps: daily per person ${cfg.dailyTokensPerUser || "none"}, monthly ${cfg.monthlyTokensGlobal || "none"}`);
@@ -55,13 +53,13 @@ async function main() {
     } catch (e) { bad(`Telegram rejected the token: ${scrub(e.message)}`); }
   }
 
-  section("Model (DeepInfra), with the agent's real tool list");
-  if (cfg.deepinfraKey) {
-    const deepinfra = require("../src/providers/deepinfra");
+  section("Model (Grok), with the agent's real tool list");
+  if (cfg.xaiKey) {
+    const grokApi = require("../src/providers/openai_compat");
     const { buildTools } = require("../src/tools/index");
     const tools = buildTools({ selected: PROJECTS.map((p) => p.id), user: { isAdmin: true }, liveOn: !!(cfg.heatmapSupabaseUrl && cfg.heatmapSupabaseKey) });
-    for (const model of [cfg.model, cfg.fallbackModel].filter(Boolean)) {
-      const p = deepinfra.create({ apiKey: cfg.deepinfraKey, model, maxTokens: 512 });
+    for (const model of [cfg.grokModel, cfg.fallbackModel].filter(Boolean)) {
+      const p = grokApi.create({ apiKey: cfg.xaiKey, model, maxTokens: 512, url: cfg.grokUrl });
       try {
         const r = await p.chat({ system: "You are a test. Call the current_time tool once.", messages: [{ role: "user", content: "What time is it?" }], tools });
         if (r.toolCalls.length) ok(`${model}: accepted all ${tools.length} tool schemas and called ${r.toolCalls[0].name} (${r.usage.in}+${r.usage.out} tokens)`);
@@ -78,11 +76,6 @@ async function main() {
       if (r.error) bad(`web_research: ${r.error}`);
       else ok(`web_research answered (${(r.answer || "").slice(0, 40)}); ${r.sources.length} source link(s) when searching`);
     } catch (e) { bad(`web_research: ${scrub(e.message).slice(0, 200)}`); }
-    if (cfg.agentProvider === "grok") {
-      const g = require("../src/providers/deepinfra").create({ apiKey: cfg.xaiKey, model: cfg.grokModel, maxTokens: 64, url: require("../src/providers/index").GROK_URL, name: "grok" });
-      try { const r = await g.chat({ system: "Reply with OK.", messages: [{ role: "user", content: "ping" }], tools: [] }); ok(`Grok main model answered (${r.usage.in}+${r.usage.out} tokens)`); }
-      catch (e) { bad(`Grok main model: ${scrub(e.message).slice(0, 200)}`); }
-    }
   }
 
   section("Repos (GitHub)");

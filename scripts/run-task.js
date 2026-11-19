@@ -39,7 +39,7 @@ const schedule = require("../src/schedule");
   const p = schedule.parse(sched);
   if (p.error) { console.error(`Schedule: ${p.error}`); process.exit(1); }
   const provider = createProvider(cfg);
-  if (!provider) { console.error("Set DEEPINFRA_API_KEY or XAI_API_KEY."); process.exit(1); }
+  if (!provider) { console.error("Set XAI_API_KEY."); process.exit(1); }
   let live = {};
   if (cfg.heatmapSupabaseUrl && cfg.heatmapSupabaseKey) {
     const { createClient } = require("@supabase/supabase-js");

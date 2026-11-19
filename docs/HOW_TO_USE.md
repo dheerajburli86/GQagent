@@ -58,13 +58,11 @@ Admins save the team's lists once, just by saying it:
 "save our India stocks: HDFC Bank, Infosys, TCS, Larsen & Toubro".
 After that anyone can ask "any news on our India stocks?" and updates can follow the list.
 
-## Choosing the AI (optional)
+## The AI
 
-You don't have to do anything: normally **DeepInfra** answers.
-- Start with **@grok** to use Grok instead. It searches the live web, good for very recent news.
-  Example: "@grok what's the latest on the yen?"
-- Write **@grok @deepinfra** to have both answer and get one combined answer.
-- The same works for regular updates: "@grok every morning at 9, news on Japan's economy".
+**Grok** answers every message. Ask it anything: it checks our own databases and
+projects for team questions, and searches the live web for anything current.
+No tags are needed (old ones like @grok are simply ignored).
 
 ## Your projects and BusyBee (team members)
 

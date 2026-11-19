@@ -9,7 +9,7 @@ Total time: about 40 minutes, most of it Telegram and Railway clicking.
 | The code | new private GitHub repo **`dheerajburli86/gquants-agent`** | yes |
 | The bot process | Railway: workspace **dheerajburli86's Projects**, new project **`gquants-agent`** | yes |
 | The bot itself | Telegram: a **new** bot made with @BotFather | yes |
-| Model | DeepInfra: one API key, with billing | yes |
+| Model | xAI Grok: one API key, with billing | yes |
 | Repo read access | GitHub: one fine-grained read-only token | yes |
 | Live market data | Supabase: the **heatmap dashboard** project (`xmcvsnollphnsonaupzt`), two values copied from it | optional, read-only |
 | Storage | a Railway **volume** at `/data` on the same service | yes (settings and budgets) |
@@ -22,7 +22,7 @@ Two things to watch:
 - **Use a new bot token.** Don't reuse the bot used for FinXray alerts, whose token
   was also left in a log file. Revoke that old token too (see Step 9).
 - **Messages reach outside services.** Your question and any file you send go to
-  DeepInfra (the model). Web searches go to DuckDuckGo, Google News and Wikipedia.
+  xAI (Grok, the model and its live web search). Extra searches go to DuckDuckGo, Google News and Wikipedia.
   Anyone in an allowed group sees the answers, so send sensitive files in a direct chat.
 
 ---
@@ -57,10 +57,11 @@ later, see "Restricting access" at the end.)
 
 Keep these in a password manager.
 
-**2a. DeepInfra.** deepinfra.com → **Dashboard → API keys → New key** → this is
-**`DEEPINFRA_API_KEY`**. Under **Billing**, add a payment method. The model
-(`google/gemini-2.5-flash`) costs about $0.30 per million input tokens and $2.50 per
-million output tokens.
+**2a. xAI Grok.** console.x.ai → **API Keys → Create** → this is **`XAI_API_KEY`**.
+Add billing or credit on the xAI console. Grok answers every question and uses its
+live web search (`web_research`) whenever a question needs current information; each
+search is billed on top of tokens. Model names change: set `AGENT_GROK_MODEL` to pick
+another (default `grok-4.3`).
 
 **2b. GitHub read token.** github.com → avatar → **Settings → Developer settings →
 Personal access tokens → Fine-grained tokens → Generate new token**.
@@ -83,17 +84,6 @@ The agent only reads from it, through an allowlist of tables and read functions.
 The key itself is powerful, though: keep it only in Railway and your password
 manager. Without these two values the bot still works, but market questions are
 answered from general knowledge only.
-
-**2d. xAI Grok (optional).** Used ONLY when someone writes **@grok** in a message
-(Grok answers, with its live web search), or **@grok @deepinfra** (both answer and
-DeepInfra merges them into one). Untagged messages and tasks never touch Grok.
-- console.x.ai → create an API key → this is **`XAI_API_KEY`**.
-- Add billing on the xAI console. Grok search is billed per search, on top of
-  tokens, so @grok answers cost more than ordinary ones.
-- Model names and prices change. Check console.x.ai before choosing a model, and set
-  `AGENT_GROK_MODEL` if you want a different one.
-
-Without this key the bot works normally; @grok replies that Grok isn't set up.
 
 ---
 
@@ -128,7 +118,7 @@ npm run doctor
 ```
 
 `doctor` checks your settings, asks Telegram who the bot is (it sends no messages),
-makes one tiny DeepInfra call with the agent's full tool list, and tests the
+makes one tiny Grok call with the agent's full tool list, and tests the
 GitHub repos, the optional live data, the web search, the exchange-rate and weather
 sources, and the calculator. Fix every ✘. A `!` on one search source is fine.
 
@@ -157,13 +147,12 @@ npm run ask -- --projects busybee "When do BusyBee reminders go out?"
 
 ```
 TELEGRAM_BOT_TOKEN=<token from Step 1>
-DEEPINFRA_API_KEY=<key from 2a>
-AGENT_MODEL=google/gemini-2.5-flash
+XAI_API_KEY=<key from 2a>
+AGENT_GROK_MODEL=grok-4.3
 GITHUB_READ_TOKEN=<token from 2b>
 SEC_USER_AGENT=GQuants Research <your email>
 HEATMAP_SUPABASE_URL=<from 2c, or delete this line>
 HEATMAP_SUPABASE_KEY=<from 2c, or delete this line>
-XAI_API_KEY=<from 2d, or delete this line>
 DATA_DIR=/data
 TASKS_ENABLED=true
 ```
@@ -173,9 +162,8 @@ TASKS_ENABLED=true
    The other task settings (`TASK_*`) have defaults in `.env.example`.
 6. **Deploy.** Wait until the deployment shows **Active** (about 2–3 minutes).
 7. Open **Deployments → View logs**. You should see, in order:
-   - `[agent] health on 8080; model: deepinfra/google/gemini-2.5-flash`
+   - `[agent] health on 8080; model: grok/grok-4.3; research: grok/grok-4.3`
    - `[bot] @gquants_agent_bot ready (1 allowed user(s), 0 group(s))`
-   - `research: grok/grok-4.3` in the same line, if you set `XAI_API_KEY`
    - `[snapshot] warm: {...}` with a commit for each repo
 
    If you see `[state] … is not usable`, the volume isn't mounted at `/data`.
@@ -278,7 +266,7 @@ the agent says so and uses web research instead. `npm run doctor` shows which wo
   choose the FinXray bot, and update that service. Delete the log file from the repo.
 - **Rotate the GitHub token** before it expires. Update `GITHUB_READ_TOKEN` in Railway.
 - **Watch spend:** `/status` shows the team's monthly tokens and the task count. `/tasks`
-  shows tokens per task. DeepInfra's and xAI's dashboards show the cost.
+  shows tokens per task. The xAI console shows the cost.
 - **Keep one replica.** Two copies would fight over the Telegram connection.
 - **Update the bot's code** by pushing to `main` on GitHub. Railway redeploys. The
   settings and budget totals survive, because they're on the volume.
@@ -292,7 +280,7 @@ the agent says so and uses web research instead. `npm run doctor` shows which wo
 | Log: `Telegram rejected the token` | Wrong token, or it was revoked in BotFather. |
 | Log: `another instance is polling this bot` | Two replicas or two copies running (for example one on your laptop). Stop the other one. |
 | The bot ignores a group | The message doesn't mention the bot (@yourbotname) or reply to it. |
-| "The agent's model is not configured" | Set `DEEPINFRA_API_KEY`. |
+| "I'm not fully set up yet" | Set `XAI_API_KEY`. |
 | "Something went wrong" | Check the logs. Usually a model error; try again or narrow the question. |
 | "today's allowance" | The person reached `AGENT_DAILY_TOKENS_PER_USER`. It resets at midnight IST. |
 | "monthly budget … used up" | The team reached `AGENT_MONTHLY_TOKENS`. Raise it. |
@@ -315,7 +303,7 @@ the agent says so and uses web research instead. `npm run doctor` shows which wo
 ## Restricting access (optional, later)
 
 The bot is open by default. Anyone who finds its username can use it, which spends
-your DeepInfra/xAI credit and lets them ask about anything the bot can read
+your xAI credit and lets them ask about anything the bot can read
 (including private repo code if `GITHUB_READ_TOKEN` is set, and the heatmap data). If
 that becomes a concern, set any of these (comma-separated Telegram IDs; a person sees
 their ID when the bot refuses them, or via /whoami):

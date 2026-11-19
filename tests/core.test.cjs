@@ -5,7 +5,7 @@ const http = require("node:http");
 
 const { runAgent, sanitizeHistory, MAX_MESSAGE_CHARS } = require("../src/agent.js");
 const { RateLimiter, istDay } = require("../src/state.js");
-const deepinfra = require("../src/providers/deepinfra.js");
+const deepinfra = require("../src/providers/openai_compat.js");
 const web = require("../src/tools/web.js");
 const dash = require("../src/tools/dashboard.js");
 const cfgMod = require("../src/config.js");
@@ -86,7 +86,7 @@ function authSb({ user, member, userErr }) {
 const reqWith = (tok) => ({ headers: tok ? { authorization: "Bearer " + tok } : {} });
 const U = (o = {}) => ({ id: "u1", email: "A@GQuants.com", email_confirmed_at: "2026-01-01", ...o });
 
-test("deepinfra: OpenAI message mapping and tool-call parsing", async () => {
+test("provider: OpenAI message mapping and tool-call parsing", async () => {
   const msgs = deepinfra.toMessages("sys", [{ role: "user", content: "q" }, { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "echo", args: { a: 1 } }] }, { role: "tool", toolCallId: "c1", name: "echo", content: "{}" }]);
   assert.equal(msgs[0].role, "system");
   assert.equal(msgs[2].tool_calls[0].function.arguments, '{"a":1}');

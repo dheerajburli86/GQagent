@@ -13,7 +13,7 @@ const { buildTools, WRITERS } = require("../src/tools/index.js");
 const live = require("../src/tools/live.js");
 const { buildSystemPrompt, withProjectsFooter } = require("../src/prompt.js");
 const { withFallback, createProvider } = require("../src/providers/index.js");
-const deepinfra = require("../src/providers/deepinfra.js");
+const deepinfra = require("../src/providers/openai_compat.js");
 const cfgMod = require("../src/config.js");
 
 // ---- fakes -----------------------------------------------------------------
@@ -327,7 +327,7 @@ test("general only ([]): no repo or live tools, prompt says no project is select
   assert.ok(["current_time", "web_search", "web_fetch", "calculate"].every((n) => tools.some((t) => t.name === n)));
   const s = buildSystemPrompt({ user: USER, selected: [], toolNames: tools.map((t) => t.name) });
   assert.match(s, /No project is selected/);
-  assert.match(s, /web_search for quick lookups/);
+  assert.match(s, /web_search for quick extra lookups/);
   assert.match(s, /calculate for any non-trivial arithmetic/);
 });
 
