@@ -67,8 +67,8 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
 /refresh  reload the project code`;
 
 class Bot {
-  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null }) {
-    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team });
+  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null, eti = null }) {
+    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team, eti });
     // engines: { grok }. Without them (older callers, tests) the one provider is used.
     this._engines = engines;
     this.pending = new dbwrite.PendingChanges(); // changes waiting for the person to tap Confirm (RAM only)
@@ -599,6 +599,7 @@ class Bot {
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const ctx = {
       projectDbs: this.projectDbs, member, openData: this.cfg.projectDataAccess === "everyone", busybeeApi,
+      eti: this.eti, etiWrite: !scheduled,
       pending: scheduled ? null : this.pending, changeQueue: [],
       recordChange: (e) => { this.store.addAudit(e); this.log(`[change] ${e.by || "?"} ${e.action} ${e.project}.${e.table}: ${e.summary}`); },
       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken, // repo tools read ctx.store = the snapshot store
@@ -612,7 +613,7 @@ class Bot {
       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti }),
         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
         ctx, history: hist, message: text,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,

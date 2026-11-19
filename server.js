@@ -48,7 +48,11 @@ if (!Object.keys(live).length) log("[agent] HEATMAP_SUPABASE_URL/KEY not set: li
 
 const researchTool = cfg.xaiKey ? require("./src/tools/research").makeTool({ apiKey: cfg.xaiKey, model: cfg.grokResearchModel }) : null;
 if (!cfg.xaiKey) log("[agent] XAI_API_KEY not set: web_research (Grok search) is off");
-const bot = new Bot({ cfg, tg, provider, engines, projectDbs, team, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool });
+// ETI: full access through its API, plus work assigned on the dashboard's Agent page.
+const { EtiClient } = require("./src/tools/eti");
+const eti = new EtiClient({ url: cfg.etiApiUrl, key: cfg.etiApiKey });
+log(`[agent] ETI: ${eti.ready ? `connected (${cfg.etiApiUrl}); polling assigned tasks every ${cfg.etiPollSeconds}s` : "not connected (set ETI_API_URL and ETI_API_KEY)"}`);
+const bot = new Bot({ cfg, tg, provider, engines, projectDbs, team, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool, eti });
 
 // Scheduled monitoring tasks: post to the chat that created them.
 const { TaskRunner } = require("./src/tasks");
@@ -88,6 +92,11 @@ const server = http.createServer((req, res) => {
   catch (e) { log(`[bot] could not start: ${String(e.message).split(cfg.telegramToken).join("<token>")}`); process.exit(1); }
   if (cfg.tasksEnabled) { runner.start(ac.signal); log(`[tasks] scheduler on: ${store.listTasks().filter((t) => t.enabled).length} active task(s), up to ${cfg.taskConcurrency} at a time`); }
   else log("[tasks] TASKS_ENABLED=false: scheduled tasks will not run");
+  if (eti.ready) {
+    const { EtiTaskWorker } = require("./src/etitasks");
+    const notify = cfg.etiNotifyChatIds.length ? async (text) => { for (const c of cfg.etiNotifyChatIds) await tg.sendPlain(c, text).catch(() => {}); } : null;
+    new EtiTaskWorker({ cfg, eti, engines, snapshots, live, liveOn: false, researchTool, store, log, notify }).start(ac.signal);
+  }
   setTimeout(() => snapshots.refreshAll().then((r) => log("[snapshot] warm: " + JSON.stringify(r))), 2000);
   if (cfg.snapshotRefreshMinutes > 0) setInterval(() => snapshots.refreshAll().catch(() => {}), cfg.snapshotRefreshMinutes * 60e3).unref();
   await poll(tg, (u) => bot.handle(u), { signal: ac.signal, onError: (e) => log(`[telegram] ${e.message}`) });

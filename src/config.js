@@ -41,6 +41,13 @@ function load(e = process.env) {
     // BusyBee actions (create / update tasks) through BusyBee's own API.
     busybeeAppUrl: (e.BUSYBEE_APP_URL || "").replace(/\/$/, ""),
     busybeeAgentSecret: e.BUSYBEE_AGENT_SECRET || "",
+    // ETI (the research dashboard): full access through its API; work assigned on its Agent page is picked up by polling.
+    etiApiUrl: (e.ETI_API_URL || "").replace(/\/$/, ""),
+    etiApiKey: e.ETI_API_KEY || "",
+    etiPollSeconds: int(e.ETI_POLL_SECONDS, 45),
+    etiTaskMaxSteps: int(e.ETI_TASK_MAX_STEPS, 30),
+    etiTaskDeadlineMs: int(e.ETI_TASK_DEADLINE_MS, 600000),
+    etiNotifyChatIds: ids(e.ETI_NOTIFY_CHAT_IDS), // optional: Telegram chats told when an assigned task finishes
     // SEC asks every client to identify itself: "Company name contact@email".
     secUserAgent: e.SEC_USER_AGENT || "",
     // Files sent in a chat stay available for follow-up questions (RAM only, cleared by /new).

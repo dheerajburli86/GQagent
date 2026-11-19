@@ -105,6 +105,21 @@ alerts to Telegram. Supabase project `gq-finxray-us`, ap-northeast-2.
 - **Live data:** not wired. It is a separate Supabase project and needs its own
   key.
 
+## eti (`eti`)
+
+**What it is:** the GQuants ETI / IMB research dashboard. A Next.js frontend, a FastAPI service and a Python worker on
+Railway (project "triumphant-cooperation"), over a Supabase Postgres database. It collects and reads, for each India
+company: financial statements, prices, investor presentations, earnings-call transcripts and annual reports.
+
+- **Completeness:** per company and dataset (`income_statement`, `balance_sheet`, `cash_flow`, `price_history`,
+  `investor_presentations`, `earnings_call_transcripts`) in `company_data_completeness`; jobs in `processing_jobs`
+  (collect_dataset, process_document, ingest_link, compute_*).
+- **Documents:** `documents` (stored in a private bucket) are chunked and read into `document_chunks` and
+  `research_evidence`. Bulk intake (`/links/submit`) takes links, JSON, XBRL or files, finds the company, converts and files them.
+- **Access for the agent:** `eti_sql` (read-only SELECT), `eti_schema`, `eti_api` (every API route). Work is also
+  assigned from the dashboard's Agent page (`agent_tasks`): the agent claims, does and reports.
+- **Live data:** yes, through the ETI API (not a Supabase key).
+
 ## GDP-Macro-Dashboard (`gdp-macro-dashboard`)
 
 **What it is:** an India GDP nowcast dashboard. It is a React 18 + Vite +

@@ -13,6 +13,7 @@
 //   research web_research (xAI Grok search, sourced)                        only when XAI_API_KEY is set
 //   data     project_tables, project_query: every configured project database, SELECT only, team members
 //   write    project_change (confirm first), dashboard_watchlist: live chats, team members
+//   eti      eti_schema, eti_sql, eti_api: the ETI dashboard, read and work (team members / assigned tasks)
 //   busybee  busybee_create_task, busybee_update_task: through BusyBee's own API, as the asker
 //   tasks    schedule_task, list_scheduled_tasks, manage_scheduled_task,    live chats only; write the bot's own task list
 //            edit_watchlist (admins)                                        and watchlists
@@ -32,6 +33,7 @@ const macro = require("./macro");
 const database = require("./database");
 const busybee = require("./busybee");
 const dbwrite = require("./dbwrite");
+const etiTools = require("./eti");
 const { byId } = require("../projects");
 
 const timeTool = {
@@ -52,7 +54,7 @@ const NO_DB = (t) => ({ ...t, run: (a, ctx) => t.run(a, { ...ctx, sb: null }) })
 
 /** buildTools({selected, user, attached, liveOn}). user.isAdmin unlocks adminOnly tools (none today). */
 /** taskTools: true only in a live conversation where a TaskRunner exists (never in scheduled runs). */
-function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false }) {
+function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, eti = null }) {
   const visible = (t) => !t.adminOnly || user.isAdmin;
   const general = [timeTool, ...search.makeTools(), ...web.makeTools(), calc.tool, publicData.tool, filings.tool, macro.tool, watchlists.readTool]
     .filter(visible).map((t) => ({ ...NO_DB(t), kind: "general" }));
@@ -67,7 +69,9 @@ function buildTools({ selected, user = {}, attached = [], liveOn = false, resear
   const bbTools = busybeeActions && taskTools && selected.includes("busybee") ? busybee.tools.map((t) => ({ ...t, kind: "busybee" })) : [];
   // Changes to project data (with Confirm / Cancel) and the asker's own dashboard watchlists: live chats only.
   const writeTools = writeActions ? dbwrite.makeTools(selected, projectDbs).map((t) => ({ ...t, kind: "write" })) : [];
-  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...writeTools, ...tasks];
+  // ETI: full access through its API (read anything; do work when allowed). Declared only when ETI is selected and connected.
+  const etiT = eti ? etiTools.makeTools(selected, eti).map((t) => ({ ...t, kind: "eti" })) : [];
+  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...writeTools, ...etiT, ...tasks];
 }
 
 module.exports = { buildTools, timeTool, research };

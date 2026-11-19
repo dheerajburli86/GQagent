@@ -4,7 +4,7 @@ const path = require("path");
 const { HttpError } = require("./errors");
 
 /**
- * The four projects. `live` names a read-only database source wired in
+ * The projects. `live` names a read-only database source wired in
  * tools/live.js; null means the agent can read the repo but not its data.
  * Summaries are routing hints for the system prompt only. The agent must
  * read the repo (read_docs / grep_code / read_file) before stating facts.
@@ -21,6 +21,10 @@ const PROJECTS = [
   {
     id: "gq-finxray-us", name: "GQ FinXray US", repo: "dheerajburli86/gq-finxray-us", branch: "main", live: null,
     summary: "Python worker that polls US market sources (SEC EDGAR, FMP, Massive, RSS), runs an LLM summarisation pipeline, and sends 13 kinds of feature-tagged Telegram alerts; also ETF and mutual-fund pollers.",
+  },
+  {
+    id: "eti", name: "ETI Research Dashboard", repo: "dheerajburli86/eti", branch: "main", live: null,
+    summary: "GQuants ETI / IMB research dashboard (Next.js + FastAPI + Python worker on Railway, Supabase Postgres): India company financial statements, prices, investor presentations, earnings-call transcripts and annual reports collected and read into evidence; completeness tracking, bulk document intake by link, IMB characteristics. Full access through the eti_sql / eti_api tools.",
   },
   {
     id: "gdp-macro-dashboard", name: "GDP Macro Dashboard", repo: "dheerajburli86/GDP-Macro-Dashboard", branch: "main", live: null,
