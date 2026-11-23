@@ -616,7 +616,7 @@ class Bot {
       attachments: attached, fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
       lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
       user: { id: userId, label: userLabel },
-      audit: async ({ tool, ok, ms }) => this.log(`[tool] user=${userId} tool=${tool} ok=${ok} ms=${ms}`),
+      audit: async ({ tool, ok, ms, args }) => this.log(`[tool] user=${userId} tool=${tool} ok=${ok} ms=${ms}${tool === "xraydar" ? ` args=${JSON.stringify(args || {}).slice(0, 300)}` : ""}`),
       task: this.runner && !scheduled ? { runner: this.runner, chatId: String(chatId), userId, userLabel, admin: !!access.admin, chatProjects: selected, engine } : null,
     };
     try {
@@ -697,7 +697,7 @@ class Bot {
       attachments: [], fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
       lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
       user: { id: key, label: userLabel },
-      audit: async ({ tool, ok, ms }) => this.log(`[tool] user=${key} tool=${tool} ok=${ok} ms=${ms}`),
+      audit: async ({ tool, ok, ms, args }) => this.log(`[tool] user=${key} tool=${tool} ok=${ok} ms=${ms}${tool === "xraydar" ? ` args=${JSON.stringify(args || {}).slice(0, 300)}` : ""}`),
       // Regular updates asked for on the dashboard are delivered to the person's Telegram, when linked.
       task: this.runner && tgId ? { runner: this.runner, chatId: tgId, userId: tgId, userLabel, admin, chatProjects: selected, engine: "default" } : null,
     };
