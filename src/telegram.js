@@ -76,11 +76,15 @@ class TelegramClient {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Long-polls for updates forever, calling handle(update) for each, in order.
- * Stops when `signal` aborts. Backs off on network errors and on 409 (another
- * instance is polling).
+ * Long-polls for updates forever and hands each one to handle(update) WITHOUT
+ * waiting for it: a question can take a minute, and waiting here would make
+ * every other person in every other chat wait behind it. Order within a chat is
+ * kept by the bot's per-chat queue. Stops when `signal` aborts. Backs off on
+ * network errors and on 409 (another instance is polling, e.g. the old
+ * container during a deploy hand-over).
+ * Returns when stopped; `inflight` (a Set) holds the handlers still running.
  */
-async function poll(client, handle, { signal, onError = (e) => client.log(`[telegram] ${e.message}`) } = {}) {
+async function poll(client, handle, { signal, onError = (e) => client.log(`[telegram] ${e.message}`), inflight = new Set() } = {}) {
   let offset = 0;
   let backoff = 1000;
   while (!(signal && signal.aborted)) {
@@ -89,17 +93,21 @@ async function poll(client, handle, { signal, onError = (e) => client.log(`[tele
       updates = await client.getUpdates(offset, 40);
       backoff = 1000;
     } catch (e) {
-      if (e.code === 409) onError(new Error("another instance is polling this bot; stop the other one (one replica only)"));
+      if (signal && signal.aborted) break;
+      if (e.code === 409) onError(new Error("another instance is polling this bot (normal for a few seconds during a deploy hand-over)"));
       else onError(e);
-      await sleep(e.code === 409 ? 10000 : backoff);
+      await sleep(e.code === 409 ? 5000 : backoff);
       backoff = Math.min(backoff * 2, 60000);
       continue;
     }
     for (const u of updates) {
       offset = u.update_id + 1;
-      try { await handle(u); } catch (e) { onError(new Error(`handler: ${e.message}`)); }
+      const p = Promise.resolve().then(() => handle(u)).catch((e) => onError(new Error(`handler: ${e.message}`)));
+      inflight.add(p);
+      p.finally(() => inflight.delete(p));
     }
   }
+  return inflight;
 }
 
 module.exports = { TelegramClient, poll, sleep };

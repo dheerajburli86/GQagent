@@ -41,12 +41,19 @@ class ProviderError extends Error {
 }
 
 /** An OpenAI-compatible chat endpoint; xAI Grok by default. */
-function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelayMs = 800, url = URL_, name = "grok" }) {
+function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelayMs = 800, attempts = 5, url = URL_, name = "grok" }) {
+  const wait = (i, retryAfter) => {
+    const ra = Number(retryAfter);
+    const ms = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 30000) : retryDelayMs * 2 ** i * (0.75 + Math.random() * 0.5);
+    return new Promise((r) => setTimeout(r, ms));
+  };
   async function chat({ system, messages, tools, temperature = 0.3 }) {
     const body = { model, messages: toMessages(system, messages), temperature, max_tokens: maxTokens };
     if (tools && tools.length) { body.tools = toTools(tools); body.tool_choice = "auto"; }
     let j, last;
-    for (let i = 0; i < 3 && !j; i++) {
+    // Under load xAI answers 429 (rate limit) or 5xx. Wait and try again, honouring
+    // Retry-After, with growing, jittered waits so many parallel questions do not retry in step.
+    for (let i = 0; i < attempts && !j; i++) {
       let res;
       try {
         res = await fetchImpl(url, {
@@ -57,14 +64,14 @@ function create({ apiKey, model, fetchImpl = fetch, maxTokens = 8192, retryDelay
         });
       } catch (e) {
         last = new ProviderError(`xAI request failed: ${String(e.message || e).slice(0, 200)}`, 0);
-        await new Promise((r) => setTimeout(r, retryDelayMs * (i + 1)));
+        if (i < attempts - 1) await wait(i, null);
         continue;
       }
       if (res.ok) { j = await res.json(); break; }
       const txt = await res.text().catch(() => "");
       last = new ProviderError(`xAI ${res.status}: ${txt.slice(0, 300)}`, res.status);
       if (res.status !== 429 && res.status < 500) throw last;
-      await new Promise((r) => setTimeout(r, retryDelayMs * (i + 1)));
+      if (i < attempts - 1) await wait(i, res.headers && res.headers.get ? res.headers.get("retry-after") : null);
     }
     if (!j) throw last;
     const choice = (j.choices || [])[0] || {};

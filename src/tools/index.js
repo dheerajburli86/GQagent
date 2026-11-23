@@ -14,6 +14,7 @@
 //   data     project_tables, project_query: every configured project database, SELECT only, team members
 //   write    project_change (confirm first), dashboard_watchlist: live chats, team members
 //   eti      eti_schema, eti_sql, eti_api: the ETI dashboard, read and work (team members / assigned tasks)
+//   xraydar  xraydar: GQ XRayDar's technical calculations through its server API (read-only)
 //   busybee  busybee_create_task, busybee_update_task: through BusyBee's own API, as the asker
 //   tasks    schedule_task, list_scheduled_tasks, manage_scheduled_task,    live chats only; write the bot's own task list
 //            edit_watchlist (admins)                                        and watchlists
@@ -34,6 +35,7 @@ const database = require("./database");
 const busybee = require("./busybee");
 const dbwrite = require("./dbwrite");
 const etiTools = require("./eti");
+const xraydarTools = require("./xraydar");
 const { byId } = require("../projects");
 
 const timeTool = {
@@ -54,7 +56,7 @@ const NO_DB = (t) => ({ ...t, run: (a, ctx) => t.run(a, { ...ctx, sb: null }) })
 
 /** buildTools({selected, user, attached, liveOn}). user.isAdmin unlocks adminOnly tools (none today). */
 /** taskTools: true only in a live conversation where a TaskRunner exists (never in scheduled runs). */
-function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, eti = null }) {
+function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, eti = null, xraydar = null }) {
   const visible = (t) => !t.adminOnly || user.isAdmin;
   const general = [timeTool, ...search.makeTools(), ...web.makeTools(), calc.tool, publicData.tool, filings.tool, macro.tool, watchlists.readTool]
     .filter(visible).map((t) => ({ ...NO_DB(t), kind: "general" }));
@@ -71,7 +73,9 @@ function buildTools({ selected, user = {}, attached = [], liveOn = false, resear
   const writeTools = writeActions ? dbwrite.makeTools(selected, projectDbs).map((t) => ({ ...t, kind: "write" })) : [];
   // ETI: full access through its API (read anything; do work when allowed). Declared only when ETI is selected and connected.
   const etiT = eti ? etiTools.makeTools(selected, eti).map((t) => ({ ...t, kind: "eti" })) : [];
-  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...writeTools, ...etiT, ...tasks];
+  // GQ XRayDar: its own calculations through its server API (read-only).
+  const xrT = xraydarTools.makeTools(selected, xraydar).map((t) => ({ ...t, kind: "xraydar" }));
+  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...xrT, ...bbTools, ...writeTools, ...etiT, ...tasks];
 }
 
 module.exports = { buildTools, timeTool, research };

@@ -48,6 +48,10 @@ function load(e = process.env) {
     etiTaskMaxSteps: int(e.ETI_TASK_MAX_STEPS, 30),
     etiTaskDeadlineMs: int(e.ETI_TASK_DEADLINE_MS, 600000),
     etiNotifyChatIds: ids(e.ETI_NOTIFY_CHAT_IDS), // optional: Telegram chats told when an assigned task finishes
+    // GQ XRayDar (technical analysis): its server API. TA_API_SECRET is shared with that server,
+    // which also uses it to call /api/chat here for its dashboard agent panel.
+    taApiUrl: (e.TA_API_URL || "").replace(/\/$/, ""),
+    taApiSecret: e.TA_API_SECRET || "",
     // SEC asks every client to identify itself: "Company name contact@email".
     secUserAgent: e.SEC_USER_AGENT || "",
     // Files sent in a chat stay available for follow-up questions (RAM only, cleared by /new).
@@ -66,6 +70,12 @@ function load(e = process.env) {
     monthlyTokensGlobal: int(e.AGENT_MONTHLY_TOKENS, 0),
     ratePerMin: int(e.AGENT_RATE_PER_MIN, 12),
     historyTurns: int(e.AGENT_HISTORY_TURNS, 6),
+    // Capacity. Every question (Telegram and dashboard) is answered in parallel; these
+    // bound how many model calls are in flight at once (the rest wait their turn, they
+    // are never dropped) and how many questions one person may have waiting.
+    maxParallelModelCalls: int(e.AGENT_MAX_PARALLEL_MODEL_CALLS, 32),
+    maxQueuedPerPerson: int(e.AGENT_MAX_QUEUED_PER_PERSON, 4),
+    webDeadlineMs: int(e.AGENT_WEB_DEADLINE_MS, 160000), // under the dashboard server's own 170 s wait
 
     // --- Scheduled tasks (monitoring that runs on its own)
     tasksEnabled: (e.TASKS_ENABLED || "true").toLowerCase() !== "false",

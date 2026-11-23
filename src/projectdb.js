@@ -12,6 +12,8 @@ const DB_ENV = {
   busybee: ["BUSYBEE_SUPABASE_URL", "BUSYBEE_SUPABASE_KEY"],
   "gq-finxray-us": ["FINXRAY_SUPABASE_URL", "FINXRAY_SUPABASE_KEY"],
   "gdp-macro-dashboard": ["GDP_SUPABASE_URL", "GDP_SUPABASE_KEY"],
+  // XRayDar keeps its tas_* tables in the heatmap database; the xraydar tool is the better route for its numbers.
+  "gq-xraydar": ["HEATMAP_SUPABASE_URL", "HEATMAP_SUPABASE_KEY"],
 };
 
 const SECRET_TABLE = /(^|_)(secrets?|tokens?|sessions?|credentials?|api_keys?|push_subscriptions|telegram_link_tokens|refresh_tokens|otp|passwords?)($|_)/i;

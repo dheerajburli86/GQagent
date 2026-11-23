@@ -42,7 +42,8 @@ More in [docs/SAMPLE_QUESTIONS.md](docs/SAMPLE_QUESTIONS.md).
 
 ```
 Telegram (direct messages, or a team group where the bot is called)
-   │  long polling: the service asks Telegram for messages; no public URL needed
+   │  long polling; each message is handed off at once, so no one waits behind another chat
+GQ XRayDar dashboard agent panel ──► ta-server ──► POST /api/chat (x-ta-secret = TA_API_SECRET)
    ▼
 bot.js     who may ask (allowlist by Telegram user ID, listed groups only),
            commands, project picker, files you send, one question at a time per chat
@@ -64,6 +65,19 @@ tools (built per question; tools for unselected projects are never offered)
    tasks     schedule_task, list_scheduled_tasks, manage_scheduled_task, edit_watchlist (admins)
              (live chats only; they change only the bot's own state file)
 ```
+
+### Many people at once
+
+Telegram and the dashboard share one agent. Every question runs in parallel: the
+Telegram poll never waits for an answer, each chat (and each dashboard user) has
+its own queue so their questions stay in order, and a shared limiter keeps at most
+`AGENT_MAX_PARALLEL_MODEL_CALLS` (32) model calls in flight; the rest wait their
+turn rather than failing. xAI rate limits are retried with Retry-After and
+jittered back-off. `AGENT_MAX_QUEUED_PER_PERSON` (4) caps how many questions one
+person can have waiting. `/health` reports `busy` (running answers, model calls,
+waiting). One replica answers hundreds of people because the work is waiting on the
+model and the network; on a deploy the old container finishes the answers it is
+writing (drainingSeconds 65) before it stops.
 
 ### Scheduled tasks
 

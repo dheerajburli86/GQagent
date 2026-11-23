@@ -67,13 +67,14 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
 /refresh  reload the project code`;
 
 class Bot {
-  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null, eti = null }) {
-    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team, eti });
+  constructor({ cfg, tg, provider, engines = null, store, snapshots, live, limiter, now = () => new Date(), log = console.log, researchTool = null, runner = null, projectDbs = null, team = null, eti = null, xraydar = null }) {
+    Object.assign(this, { cfg, tg, provider, store, snapshots, live, limiter, now, log, researchTool, runner, projectDbs, team, eti, xraydar });
     // engines: { grok }. Without them (older callers, tests) the one provider is used.
     this._engines = engines;
     this.pending = new dbwrite.PendingChanges(); // changes waiting for the person to tap Confirm (RAM only)
     this.me = null;
     this.queues = new Map();   // chatId -> promise chain (one question at a time per chat)
+    this.depth = new Map();    // chatId -> questions waiting or running in that chat
     this.history = new Map();  // chatId -> [{role, content}] (RAM only)
     this.files = new Map();    // chatId -> [{doc, at}] files sent recently, for follow-up questions (RAM only)
     this.liveOn = Object.keys(live || {}).length > 0;
@@ -134,17 +135,26 @@ class Bot {
 
     if (!this.limiter.take(String(from.id))) return this.reply(m, "You're sending messages quickly. Give it a minute and try again.");
     if (!this.engines.grok) { this.log("[bot] no model: set XAI_API_KEY"); return this.reply(m, "I'm not fully set up yet. Please let the admin know."); }
+    if (this.queued(chat.id) >= this.cfg.maxQueuedPerPerson) return this.reply(m, "I'm still working on your earlier questions here. I'll answer them first; send this one again after that.");
     return this.enqueue(chat.id, () => this.ask(m, { text: text || (attachments.length ? "I've sent you a file. Give a short summary of what it is and its key points, then suggest two or three useful things you could do with it." : ""), attachments, access }));
   }
 
   enqueue(chatId, job) {
     const key = String(chatId);
     const prev = this.queues.get(key) || Promise.resolve();
+    this.depth.set(key, (this.depth.get(key) || 0) + 1);
     const next = prev.then(job, job).catch((e) => this.log(`[bot] job failed: ${String(e && e.message || e).slice(0, 200)}`));
     this.queues.set(key, next);
-    next.finally(() => { if (this.queues.get(key) === next) this.queues.delete(key); });
+    next.finally(() => {
+      const d = (this.depth.get(key) || 1) - 1;
+      if (d > 0) this.depth.set(key, d); else this.depth.delete(key);
+      if (this.queues.get(key) === next) this.queues.delete(key);
+    });
     return next;
   }
+
+  /** How many questions are waiting or running in a chat. */
+  queued(chatId) { return this.depth.get(String(chatId)) || 0; }
 
   // ---------------------------------------------------------------- commands
   async command(m, text, access) {
@@ -613,7 +623,7 @@ class Bot {
       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti, xraydar: this.xraydar }),
         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
         ctx, history: hist, message: text,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
@@ -636,6 +646,84 @@ class Bot {
       clearTimeout(waitTimer);
       if (waitNote) waitNote.then((id) => id && this.tg.deleteMessage(chatId, id));
       if (ctx.usage.in || ctx.usage.out) this.store.record(userId, ctx.usage.in, ctx.usage.out, this.now());
+    }
+  }
+
+  /**
+   * A question from the GQ XRayDar dashboard's agent panel (through ta-server, which
+   * has already checked the person's @gquants.com sign-in). Same model, tools and
+   * rules as Telegram; the answer is returned instead of sent. Stateless: the panel
+   * sends its own short history, so any number of people can ask at once.
+   * user: { email, name, telegramUserId? }. Returns { answer, model, ms, steps }.
+   */
+  async webAsk({ user = {}, message, history = [], context = null }) {
+    const email = String(user.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+$/.test(email)) throw new HttpError(400, "user.email is required");
+    const text = String(message || "").trim();
+    if (!text) throw new HttpError(400, "message is required");
+    if (!this.engines.grok) throw new HttpError(503, "The agent's model is not configured (XAI_API_KEY).");
+    const key = `web:${email}`;
+    if (!this.limiter.take(key)) throw new HttpError(429, "You're sending questions quickly. Give it a minute and try again.");
+    if (this.queued(key) >= this.cfg.maxQueuedPerPerson) throw new HttpError(429, "I'm still answering your earlier questions. Wait for those, then ask again.");
+    let result, failure;
+    await this.enqueue(key, async () => {
+      try { result = await this.webAnswer({ email, user, text, history, context, key }); }
+      catch (e) { failure = e; }
+    });
+    if (failure) throw failure;
+    return result;
+  }
+
+  async webAnswer({ email, user, text, history, context, key }) {
+    const tgId = /^\d{1,20}$/.test(String(user.telegramUserId || "")) ? String(user.telegramUserId) : null;
+    // Team member: their BusyBee account (by Telegram link, else by e-mail). Every dashboard
+    // user has a verified @gquants.com sign-in, so they are a team member even without one.
+    let member = null;
+    if (this.team) member = (tgId && await this.team.member(tgId)) || await this.team.memberByEmail(email);
+    member = member
+      ? { ...member, telegramId: tgId }
+      : { userId: null, name: user.name || email, email, role: "member", desks: [], telegramId: tgId, viaDashboard: true };
+    const userLabel = `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
+    const admin = this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId));
+    const selected = [...IDS];
+    const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
+    const started = Date.now();
+    const ctx = {
+      projectDbs: this.projectDbs, member, openData: true, busybeeApi,
+      eti: this.eti, etiWrite: false,
+      pending: null, changeQueue: [], // no Confirm button on the dashboard: no proposed data changes there
+      recordChange: (e) => { this.store.addAudit(e); this.log(`[change] ${e.by || "?"} ${e.action} ${e.project}.${e.table}: ${e.summary}`); },
+      store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken,
+      attachments: [], fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
+      lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
+      user: { id: key, label: userLabel },
+      audit: async ({ tool, ok, ms }) => this.log(`[tool] user=${key} tool=${tool} ok=${ok} ms=${ms}`),
+      // Regular updates asked for on the dashboard are delivered to the person's Telegram, when linked.
+      task: this.runner && tgId ? { runner: this.runner, chatId: tgId, userId: tgId, userLabel, admin, chatProjects: selected, engine: "default" } : null,
+    };
+    const where = context && typeof context === "object"
+      ? [context.page && `page "${String(context.page).slice(0, 60)}"`, (context.symbol || context.name) && `instrument ${[context.symbol, context.name].filter(Boolean).join(" · ").slice(0, 120)}${context.country ? ` (${context.country})` : ""}`, context.tf && `timeframe ${String(context.tf).slice(0, 10)}`].filter(Boolean).join(", ")
+      : "";
+    const message = where ? `${text}\n\n(Asked on the GQ XRayDar dashboard; on screen: ${where}. Use this only if the question refers to it, e.g. "this stock".)` : text;
+    try {
+      const out = await runWithEngines({
+        mode: "default", engines: this.engines, researchTool: this.researchTool,
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar }),
+        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard" }),
+        ctx, history: Array.isArray(history) ? history.slice(-12) : [], message,
+        maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.webDeadlineMs,
+        checkBudget: () => this.store.check(key, this.cfg, this.now()),
+      });
+      const answer = withProjectsFooter(out.answer, ctx.projectsUsed, selected);
+      this.log(`[answer] user=${key} via=dashboard projects=${[...ctx.projectsUsed].join(",") || "-"} steps=${out.steps.length} ms=${Date.now() - started}`);
+      const model = this.engines.grok.lastModel || this.engines.grok.model;
+      return { answer, model, ms: Date.now() - started, steps: out.steps.length };
+    } catch (e) {
+      if (e instanceof BudgetError || e instanceof HttpError || e.userFacing) throw e;
+      this.log(`[answer] dashboard error: ${String(e.stack || e).slice(0, 400)}`);
+      throw new HttpError(502, "I couldn't finish that one. Please try again, or ask in a simpler or shorter way.");
+    } finally {
+      if (ctx.usage.in || ctx.usage.out) this.store.record(key, ctx.usage.in, ctx.usage.out, this.now());
     }
   }
 

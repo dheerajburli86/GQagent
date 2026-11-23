@@ -48,6 +48,31 @@ class Team {
     this.cache.set(key, { v, at: Date.now() });
     return v;
   }
+
+  /** The same lookup by BusyBee e-mail (for the dashboard, where the sign-in is an e-mail). */
+  async memberByEmail(email) {
+    const e = String(email || "").trim().toLowerCase();
+    if (!this.db || !/^[^\s@]+@[^\s@]+$/.test(e)) return null;
+    const key = `email:${e}`;
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.at < this.ttl) return hit.v;
+    let v = null;
+    try {
+      const u = await this.db.from("users").select("id, full_name, email").ilike("email", e).maybeSingle();
+      if (u.error) throw new Error(u.error.message);
+      if (u.data && u.data.id) {
+        const d = await this.db.from("desk_members").select("desk_id, role").eq("user_id", u.data.id);
+        const desks = ((d && d.data) || []).map((m) => ({ desk_id: m.desk_id, role: normRole(m.role) }));
+        const role = desks.reduce((best, m) => (ORDER.indexOf(m.role) > ORDER.indexOf(best) ? m.role : best), "member");
+        v = { userId: u.data.id, name: u.data.full_name || null, email: u.data.email || e, role, desks };
+      }
+    } catch (err) {
+      this.log(`[team] e-mail lookup failed: ${String(err.message || err).slice(0, 120)}`);
+      return hit ? hit.v : null;
+    }
+    this.cache.set(key, { v, at: Date.now() });
+    return v;
+  }
 }
 
 module.exports = { Team, normRole };

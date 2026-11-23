@@ -27,6 +27,10 @@ const PROJECTS = [
     summary: "GQuants ETI / IMB research dashboard (Next.js + FastAPI + Python worker on Railway, Supabase Postgres): India company financial statements, prices, investor presentations, earnings-call transcripts and annual reports collected and read into evidence; completeness tracking, bulk document intake by link, IMB characteristics. Full access through the eti_sql / eti_api tools.",
   },
   {
+    id: "gq-xraydar", name: "GQ XRayDar", repo: "dheerajburli86/GQ-XRayDar", branch: "main", live: null,
+    summary: "GQ XRayDar, the team's AI-powered technical-analysis app (React/Vite + a Node server and a nightly engine on Railway; tas_* tables in the heatmap Supabase database): MMA / RSI / RSC screens, 50+ indicators, house CW / EW indices, GLOCOM / LOCOM, Weight Watcher, breadth, derivatives, alerts. Use the xraydar tool for its numbers.",
+  },
+  {
     id: "gdp-macro-dashboard", name: "GDP Macro Dashboard", repo: "dheerajburli86/GDP-Macro-Dashboard", branch: "main", live: null,
     summary: "India GDP nowcast dashboard (React/Vite/Recharts): 53 monthly indicators grouped into Consumption, Investment, Government, Net Exports and Cross-Cutting; shows dummy data until a feed is connected.",
   },

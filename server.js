@@ -1,10 +1,14 @@
 "use strict";
-// GQuants Agent: a Telegram bot in front of a read-only research agent.
-// One process, ONE replica (Telegram allows one poller per token; the
-// per-person limits and the in-RAM conversation memory live here too).
+// GQuants Agent: one research agent with two front doors, Telegram and the
+// GQ XRayDar dashboard's agent panel. Every question runs in parallel: the
+// Telegram poll never waits for an answer, each chat / person has its own queue,
+// and a shared limiter bounds how many model calls are in flight (the rest wait
+// their turn). One replica (Telegram allows one poller per token, and the
+// per-person limits and the in-RAM conversation memory live here).
 //
-//   GET /health   the only HTTP route: Railway's health check
-//   Telegram      long polling, no public URL needed
+//   GET  /health     Railway's health check (also reports load)
+//   POST /api/chat   the dashboard panel, via ta-server (x-ta-secret = TA_API_SECRET)
+//   Telegram         long polling
 const http = require("http");
 const os = require("os");
 const cfgMod = require("./src/config");
@@ -22,7 +26,9 @@ const log = (m) => console.log(new Date().toISOString().slice(0, 19) + " " + m);
 if (!cfg.telegramToken) { console.error("TELEGRAM_BOT_TOKEN is not set (see DEPLOY.md, Step 1)."); process.exit(1); }
 
 const tg = new TelegramClient({ token: cfg.telegramToken, apiBase: cfg.telegramApiBase, log });
-const provider = createProvider(cfg);
+const { Semaphore, limitProvider } = require("./src/limit");
+const modelSlots = new Semaphore(cfg.maxParallelModelCalls);
+const provider = limitProvider(createProvider(cfg), modelSlots);
 const engines = { grok: provider };
 const store = new Store(cfg.dataDir, log);
 const snapshots = new SnapshotStore({ projects: PROJECTS, token: cfg.githubToken, workDir: os.tmpdir(), maxFileKb: cfg.snapshotMaxFileKb, maxTotalMb: cfg.snapshotMaxTotalMb, log });
@@ -52,7 +58,11 @@ if (!cfg.xaiKey) log("[agent] XAI_API_KEY not set: web_research (Grok search) is
 const { EtiClient } = require("./src/tools/eti");
 const eti = new EtiClient({ url: cfg.etiApiUrl, key: cfg.etiApiKey });
 log(`[agent] ETI: ${eti.ready ? `connected (${cfg.etiApiUrl}); polling assigned tasks every ${cfg.etiPollSeconds}s` : "not connected (set ETI_API_URL and ETI_API_KEY)"}`);
-const bot = new Bot({ cfg, tg, provider, engines, projectDbs, team, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool, eti });
+// GQ XRayDar: its own calculations through its server API (read-only).
+const { XRayDarClient } = require("./src/tools/xraydar");
+const xraydar = new XRayDarClient({ url: cfg.taApiUrl, secret: cfg.taApiSecret });
+log(`[agent] GQ XRayDar: ${xraydar.ready ? `connected (${cfg.taApiUrl})` : "not connected (set TA_API_URL and TA_API_SECRET)"}; dashboard /api/chat: ${cfg.taApiSecret ? "on" : "off (set TA_API_SECRET)"}`);
+const bot = new Bot({ cfg, tg, provider, engines, projectDbs, team, store, snapshots, live, limiter: new RateLimiter(cfg.ratePerMin), log, researchTool, eti, xraydar });
 
 // Scheduled monitoring tasks: post to the chat that created them.
 const { TaskRunner } = require("./src/tasks");
@@ -76,14 +86,53 @@ const runner = new TaskRunner({
 bot.runner = runner;
 
 const ac = new AbortController();
-const server = http.createServer((req, res) => {
-  if (req.method === "GET" && req.url.split("?")[0] === "/health") {
-    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    res.end(JSON.stringify({ ok: true, model: provider ? provider.model : null, live: Object.keys(live).length > 0, telegram: bot.me ? `@${bot.me.username}` : "starting" }));
-    return;
+const inflight = new Set(); // Telegram handlers and dashboard requests still running
+const crypto = require("crypto");
+const secretOk = (got) => {
+  const want = cfg.taApiSecret;
+  if (!want || typeof got !== "string" || got.length !== want.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+};
+const sendJson = (res, code, obj) => {
+  if (res.headersSent) return;
+  res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
+  res.end(JSON.stringify(obj));
+};
+const readBody = (req, max = 256 * 1024) => new Promise((resolve, reject) => {
+  let size = 0; const chunks = [];
+  req.on("data", (c) => { size += c.length; if (size > max) { reject(Object.assign(new Error("request too large"), { status: 413 })); req.destroy(); } else chunks.push(c); });
+  req.on("end", () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {}); } catch { reject(Object.assign(new Error("body is not JSON"), { status: 400 })); } });
+  req.on("error", reject);
+});
+let stopping = false;
+
+const server = http.createServer(async (req, res) => {
+  const path = req.url.split("?")[0];
+  if (req.method === "GET" && path === "/health") {
+    return sendJson(res, 200, { ok: true, model: provider ? provider.model : null, live: Object.keys(live).length > 0, telegram: bot.me ? `@${bot.me.username}` : "starting", dashboard: !!cfg.taApiSecret, xraydar: xraydar.ready, busy: { running: inflight.size, modelCalls: modelSlots.active, waitingForModel: modelSlots.waiting } });
+  }
+  if (req.method === "POST" && path === "/api/chat") {
+    if (!secretOk(String(req.headers["x-ta-secret"] || ""))) return sendJson(res, 401, { error: "secret missing or wrong" });
+    if (stopping) return sendJson(res, 503, { error: "the agent is restarting; ask again in a few seconds" });
+    const job = (async () => {
+      try {
+        const b = await readBody(req);
+        const out = await bot.webAsk({ user: b.user || {}, message: b.message, history: b.history, context: b.context });
+        sendJson(res, 200, out);
+      } catch (e) {
+        const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
+        if (status === 500) log(`[api] error: ${String(e.stack || e).slice(0, 300)}`);
+        sendJson(res, status, { error: status === 500 ? "the agent hit an error; please try again" : e.message });
+      }
+    })();
+    inflight.add(job); job.finally(() => inflight.delete(job));
+    return job;
   }
   res.writeHead(404, { "content-type": "text/plain" }).end("not found");
 });
+server.requestTimeout = 0; // answers can take a few minutes; the agent's own deadline bounds them
+server.headersTimeout = 60000;
+server.keepAliveTimeout = 65000;
 
 (async () => {
   await new Promise((r) => server.listen(cfg.port, r));
@@ -99,9 +148,20 @@ const server = http.createServer((req, res) => {
   }
   setTimeout(() => snapshots.refreshAll().then((r) => log("[snapshot] warm: " + JSON.stringify(r))), 2000);
   if (cfg.snapshotRefreshMinutes > 0) setInterval(() => snapshots.refreshAll().catch(() => {}), cfg.snapshotRefreshMinutes * 60e3).unref();
-  await poll(tg, (u) => bot.handle(u), { signal: ac.signal, onError: (e) => log(`[telegram] ${e.message}`) });
+  await poll(tg, (u) => bot.handle(u), { signal: ac.signal, onError: (e) => log(`[telegram] ${e.message}`), inflight });
 })();
 
-const stop = () => { log("[agent] shutting down"); ac.abort(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); };
+// On a deploy, stop taking new work, let answers already being written finish
+// (up to 60 s), then exit. The new container takes over the Telegram poll.
+const stop = async () => {
+  if (stopping) return;
+  stopping = true;
+  log(`[agent] shutting down; finishing ${inflight.size} answer(s) in progress`);
+  ac.abort();
+  setTimeout(() => process.exit(0), 60000).unref();
+  await Promise.race([Promise.allSettled([...inflight]), new Promise((r) => setTimeout(r, 58000))]);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 1000).unref();
+};
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);

@@ -120,6 +120,38 @@ company: financial statements, prices, investor presentations, earnings-call tra
   assigned from the dashboard's Agent page (`agent_tasks`): the agent claims, does and reports.
 - **Live data:** yes, through the ETI API (not a Supabase key).
 
+## GQ XRayDar (`gq-xraydar`)
+
+**What it is:** GQ XRayDar, the GQ AI-Powered Technical Analysis Software. A
+standalone React + Vite app (Vercel) with a Node server (`ta-server`) and a
+nightly batch engine (`engine` cron, 02:40 UTC, about 4 hours) on Railway. It
+reads the heatmap's market tables and writes only its own `tas_*` tables in the
+same Supabase database. It is separate from the heatmap dashboard.
+
+- **Best route for its numbers:** the `xraydar` tool. It calls the app's own
+  server, so a figure the agent quotes is the figure the app shows. Look field
+  keys up with `xraydar` action `fields` before a screen.
+- **What it computes:** per stock and timeframe (D, W, M, Q, N = 9 months, Y):
+  MMA (multiple moving averages, short 3-15 and long 30-60 EMAs) alignment,
+  squeezes and breakouts; RSI, MACD, KST, ROC, ADX, stochastic and 50+ chart
+  studies; trend stage; chart patterns; relative strength (RSC) against the
+  country, sector and global indices; the AI setup score; confluence counts.
+  House cap-weighted (CW) and equal-weighted (EW) indices by region, country,
+  sector, size; GLOCOM / LOCOM momentum bands; Weight Watcher; breadth; regime;
+  sector rotation; derivatives (NSE F&O end-of-day); IMB / ETI characteristics
+  copied from the ETI project (shown, never scored).
+- **Key tables:** `tas_security` (security master: symbol, country, sector,
+  industry group, cap), `tas_snapshot` (per-stock calculations as JSON, `as_of`),
+  `tas_index` + `tas_index_values` (house indices), `tas_glocom_group`,
+  `tas_breadth`, `tas_rotation`, `tas_regime`, `tas_ww`, `tas_calc_run` (engine
+  runs; `status`, `finished`), `tas_eti_characteristic`, `tas_fo_*`.
+- **India has no market cap in this app** (owner's decision): India stocks join
+  equal-weight indices only and are ranked by traded value.
+- **Live data:** yes, through the `xraydar` tool, and read-only through
+  project_query on the heatmap database.
+
+---
+
 ## GDP-Macro-Dashboard (`gdp-macro-dashboard`)
 
 **What it is:** an India GDP nowcast dashboard. It is a React 18 + Vite +
