@@ -694,14 +694,16 @@ class Bot {
         ? { ...member, telegramId: tgId }
         : { userId: null, name: user.name || email, email, role: "member", desks: [], telegramId: tgId, viaDashboard: true };
     }
-    const userLabel = guest ? "a visitor to the GQ XRayDar dashboard (not signed in; for market data such as prices, market caps, returns, screens and indicators use the xraydar tool first, the web only for what it lacks)" : `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
+    const userLabel = guest ? "a visitor to the GQ XRayDar dashboard (not signed in)" : `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
     const admin = !guest && (this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId)));
-    const selected = guest ? [] : [...IDS];
+    // Guests (dashboard, no login) read every project's code and data EXCEPT BusyBee (staff tasks, timesheets,
+    // payroll). Read-only: no writes, no BusyBee actions, no tasks. The guard checks ctx.selected at call time too.
+    const selected = guest ? IDS.filter((id) => id !== "busybee") : [...IDS];
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member?.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const started = Date.now();
     const ctx = {
-      projectDbs: guest ? null : this.projectDbs, member, openData: !guest, busybeeApi,
-      eti: guest ? null : this.eti, etiWrite: false,
+      projectDbs: this.projectDbs, member, openData: true, busybeeApi,
+      eti: this.eti, etiWrite: false,
       pending: null, changeQueue: [], // no Confirm button on the dashboard: no proposed data changes there
       recordChange: (e) => { this.store.addAudit(e); this.log(`[change] ${e.by || "?"} ${e.action} ${e.project}.${e.table}: ${e.summary}`); },
       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken,
@@ -719,8 +721,8 @@ class Bot {
     try {
       const out = await runWithEngines({
         mode: "default", engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: guest ? false : this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: guest ? null : this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: guest ? null : this.eti, xraydar: this.xraydar, xraydarAlways: guest }),
-        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard" }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar, xraydarAlways: true }),
+        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard", guest }),
         ctx, history: Array.isArray(history) ? history.slice(-12) : [], message,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.webDeadlineMs,
         checkBudget: () => this.store.check(key, this.cfg, this.now()),

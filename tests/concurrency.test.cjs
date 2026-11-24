@@ -184,18 +184,21 @@ test("server: POST /api/chat needs the shared secret and answers many dashboard 
   }
 });
 
-test("dashboard guest (no login): answered, but with no project, database, ETI or BusyBee tools and never admin", async () => {
+test("dashboard guest (no login): reads every project except BusyBee, read-only, never admin, and is told where the data lives", async () => {
   let got = null;
   const { bot } = makeBot();
   bot._engines = { grok: { name: "grok", model: "fake", chat: async (args) => { got = args; return { text: "ok", toolCalls: [], usage: {} }; } } };
   const out = await bot.webAsk({ user: { guest: true, guestId: "abc123" }, message: "top 5 US stocks by market cap" });
   assert.equal(out.answer.trim().split("\n")[0], "ok");
-  assert.match(got.system, /visitor to the GQ XRayDar dashboard/);
+  assert.match(got.system, /without signing in/);
+  assert.match(got.system, /Projects selected for this conversation[\s\S]*heatmap-dashboard/);
+  assert.match(got.system, /NO market cap for Indian stocks/);
+  assert.match(got.system, /BusyBee is closed/);
   const names = (got.tools || []).map((t) => t.name);
-  assert.ok(!names.some((n) => /^project_|^eti_|busybee|repo|github/i.test(n)), `guest tools: ${names.join(",")}`);
+  assert.ok(!names.some((n) => /busybee|^propose_|_write$|^db_write|schedule_task|edit_watchlist/i.test(n)), `guest tools: ${names.join(",")}`);
   await assert.rejects(bot.webAsk({ user: { guest: true }, message: "x" }), (e) => e.status === 400);
   const { buildTools } = require("../src/tools");
   const guestTools = buildTools({ selected: [], xraydar: new (require("../src/tools/xraydar").XRayDarClient)({ url: "https://x", secret: "s" }), xraydarAlways: true }).map((t) => t.name);
-  assert.ok(guestTools.some((n) => /xraydar/.test(n)), `guest gets the xraydar data tool: ${guestTools.join(",")}`);
-  assert.ok(!guestTools.some((n) => /repo|github/i.test(n)), "but no code tools");
+  assert.ok(guestTools.some((n) => /xraydar/.test(n)), `xraydar tool offered: ${guestTools.join(",")}`);
 });
+
