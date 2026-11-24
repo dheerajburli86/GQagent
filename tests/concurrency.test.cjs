@@ -132,7 +132,7 @@ test("xraydar tool: calls the app's API with the shared secret and the asker's T
   assert.equal(calls[0].opts.headers["x-ta-secret"], "s3cret");
   assert.equal(JSON.parse(calls[1].opts.body).scope.country, "United States");
   assert.equal(calls[2].opts.headers["x-telegram-user"], "42");
-  assert.deepEqual(await tool.run({ action: "screen" }, {}), { error: "give at least one condition; look the field keys up with action=fields first" });
+  assert.deepEqual(await tool.run({ action: "screen" }, {}), { error: "give a condition, a scope or a sort; look the field keys up with action=fields first" });
   assert.equal(makeTools(["busybee"], client).length, 0);
   assert.equal(makeTools(["gq-xraydar"], new XRayDarClient({})).length, 0);
   const names = buildTools({ selected: ["gq-xraydar"], xraydar: client }).map((t) => t.name);

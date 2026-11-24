@@ -35,7 +35,7 @@ Actions:
 - stock {ref}: the full technical picture of one instrument (ref = symbol or id).
 - chart_read {ref, tfs?}: a plain-language chart read for timeframes, e.g. "D,W".
 - compare {a, b}: two instruments side by side.
-- screen {conditions, scope?, sort?, limit?, columns?}: stocks matching ALL conditions. A condition is {field, op, value?, value2?}; op is one of > >= < <= between is "is not" in contains "is true" "is false" "is set". Money fields (capUsd) are in US dollars (10 billion = 10000000000). scope narrows by {country, region, classification, sector, industryGroup, cap, assetClass}. sort = {field, dir: "desc"|"asc"}. columns = extra field keys to return per row.
+- screen {conditions?, scope?, sort?, limit?, columns?}: stocks matching ALL conditions (conditions may be empty for a pure ranking, e.g. scope {country} + sort {field: capUsd, dir: desc}). A condition is {field, op, value?, value2?}; op is one of > >= < <= between is "is not" in contains "is true" "is false" "is set". Money fields (capUsd) are in US dollars (10 billion = 10000000000). scope narrows by {country, region, classification, sector, industryGroup, cap, assetClass}. sort = {field, dir: "desc"|"asc"}. columns = extra field keys to return per row.
 - market {query}: index levels, breadth, regime and rotation. query: G (global), R:<region> or C:<country>, e.g. C:India, C:United States.
 - review {symbols? | watchlist?, question?}: which names in a list are rising, with evidence.
 - signal_stats: back-test summary of the signals. brief {period: daily|weekly}: the market brief text.
@@ -68,8 +68,10 @@ Always give the as-of date from the result. Do not quote a field you did not get
       case "chart_read": return client.call("GET", `/api/chart-read/${enc(a.ref || a.query || "")}?tfs=${enc(a.tfs || "D,W")}`);
       case "compare": return client.call("GET", `/api/compare?a=${enc(a.a || "")}&b=${enc(a.b || "")}`);
       case "screen": {
-        if (!Array.isArray(a.conditions) || !a.conditions.length) return { error: "give at least one condition; look the field keys up with action=fields first" };
-        return client.call("POST", "/api/screen", { body: { conditions: a.conditions, scope: a.scope || {}, sort: a.sort, limit: a.limit || 25, columns: a.columns || [] } });
+        // a ranking alone is a valid screen ("top 5 US stocks by market cap": scope + sort, no condition)
+        const conds = Array.isArray(a.conditions) ? a.conditions : [];
+        if (!conds.length && !a.sort && !(a.scope && Object.keys(a.scope).length)) return { error: "give a condition, a scope or a sort; look the field keys up with action=fields first" };
+        return client.call("POST", "/api/screen", { body: { conditions: conds, scope: a.scope || {}, sort: a.sort, limit: a.limit || 25, columns: a.columns || [] } });
       }
       case "market": return client.call("GET", `/api/market?scope=${enc(a.query || "G")}`);
       case "review": return client.call("POST", "/api/review", { body: { symbols: a.symbols, watchlist: a.watchlist, question: a.question }, telegramId: tg });
