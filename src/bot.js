@@ -694,7 +694,7 @@ class Bot {
         ? { ...member, telegramId: tgId }
         : { userId: null, name: user.name || email, email, role: "member", desks: [], telegramId: tgId, viaDashboard: true };
     }
-    const userLabel = guest ? "a visitor to the GQ XRayDar dashboard (not signed in)" : `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
+    const userLabel = guest ? "a visitor to the GQ XRayDar dashboard (not signed in; for market data such as prices, market caps, returns, screens and indicators use the xraydar tool first, the web only for what it lacks)" : `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
     const admin = !guest && (this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId)));
     const selected = guest ? [] : [...IDS];
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member?.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
@@ -719,7 +719,7 @@ class Bot {
     try {
       const out = await runWithEngines({
         mode: "default", engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: guest ? false : this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: guest ? null : this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: guest ? null : this.eti, xraydar: this.xraydar }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: guest ? false : this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: guest ? null : this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: guest ? null : this.eti, xraydar: this.xraydar, xraydarAlways: guest }),
         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard" }),
         ctx, history: Array.isArray(history) ? history.slice(-12) : [], message,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.webDeadlineMs,

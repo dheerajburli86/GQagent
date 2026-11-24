@@ -194,4 +194,8 @@ test("dashboard guest (no login): answered, but with no project, database, ETI o
   const names = (got.tools || []).map((t) => t.name);
   assert.ok(!names.some((n) => /^project_|^eti_|busybee|repo|github/i.test(n)), `guest tools: ${names.join(",")}`);
   await assert.rejects(bot.webAsk({ user: { guest: true }, message: "x" }), (e) => e.status === 400);
+  const { buildTools } = require("../src/tools");
+  const guestTools = buildTools({ selected: [], xraydar: new (require("../src/tools/xraydar").XRayDarClient)({ url: "https://x", secret: "s" }), xraydarAlways: true }).map((t) => t.name);
+  assert.ok(guestTools.some((n) => /xraydar/.test(n)), `guest gets the xraydar data tool: ${guestTools.join(",")}`);
+  assert.ok(!guestTools.some((n) => /repo|github/i.test(n)), "but no code tools");
 });
