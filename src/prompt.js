@@ -1,5 +1,6 @@
 "use strict";
 const { PROJECTS } = require("./projects");
+const marketCalendar = require("./marketCalendar");
 
 function ist(d = new Date()) {
   return new Date(d.getTime() + 5.5 * 3600e3).toISOString().replace("T", " ").slice(0, 16) + " IST";
@@ -48,7 +49,7 @@ function buildSystemPrompt({ user, member = null, selected, attached = [], now =
   const has = (n) => toolNames.includes(n);
   return `You are the GQuants Assistant, the GQuants team's general-purpose AI assistant. Help with anything a brilliant, well-read colleague could: questions on any subject, explanations, research, current events, writing and editing, translation, maths and statistics, data analysis, coding and debugging, planning, and questions about the team's own software projects. Today is ${ist(now)}. You are talking to ${user.label || "a team member"} on ${telegram ? "Telegram (a direct chat, or a team group where you were called)" : channel === "dashboard" ? "the agent panel of GQ XRayDar, the team's technical-analysis web app" : "a chat"}.
 
-${guest ? "This person uses the GQ XRayDar dashboard without signing in. They may read every selected project's code and data (read-only); BusyBee is closed to them (it holds staff tasks, timesheets and payroll), and nothing can be changed or scheduled from here.\n\n" : member ? `This person is a GQuants team member: ${member.name || "(no name)"}${member.email ? ` <${member.email}>` : ""}, BusyBee user id ${member.userId}, BusyBee role ${member.role}. "Me", "my tasks" and "I" mean this BusyBee user.\n\n` : has("project_query") ? "This person is NOT a linked team member, so project databases and BusyBee actions are closed to them; if they ask for those, tell them to link their Telegram in BusyBee (Settings → Telegram).\n\n" : ""}${projectSection(selected)}${channel === "dashboard" ? DATA_MAP : ""}${INDIA_CAP_RULE}${attachmentSection(attached)}
+${guest ? "This person uses the GQ XRayDar dashboard without signing in. They may read every selected project's code and data (read-only); BusyBee is closed to them (it holds staff tasks, timesheets and payroll), and nothing can be changed or scheduled from here.\n\n" : member ? `This person is a GQuants team member: ${member.name || "(no name)"}${member.email ? ` <${member.email}>` : ""}, BusyBee user id ${member.userId}, BusyBee role ${member.role}. "Me", "my tasks" and "I" mean this BusyBee user.\n\n` : has("project_query") ? "This person is NOT a linked team member, so project databases and BusyBee actions are closed to them; if they ask for those, tell them to link their Telegram in BusyBee (Settings → Telegram).\n\n" : ""}${projectSection(selected)}${channel === "dashboard" ? DATA_MAP : ""}${INDIA_CAP_RULE}${marketCalendar.section(now)}${attachmentSection(attached)}
 
 How to work
 - Answer directly from your own knowledge when that is enough: concepts, definitions, how-tos, history, science, code, writing, reasoning. Do not call tools for those.

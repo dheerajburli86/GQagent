@@ -1,4 +1,5 @@
 "use strict";
+const marketCalendar = require("./marketCalendar");
 // The Telegram front end: who may ask, how a message becomes a question, the
 // commands, the project picker, attachments, and the answer.
 const { check, label } = require("./access");
@@ -621,6 +622,7 @@ class Bot {
     };
     try {
       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
+      await marketCalendar.load(this.snapshots);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
         buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti, xraydar: this.xraydar }),
@@ -719,6 +721,7 @@ class Bot {
       : "";
     const message = where ? `${text}\n\n(Asked on the GQ XRayDar dashboard; on screen: ${where}. Use this only if the question refers to it, e.g. "this stock".)` : text;
     try {
+      await marketCalendar.load(this.snapshots);
       const out = await runWithEngines({
         mode: "default", engines: this.engines, researchTool: this.researchTool,
         buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar, xraydarAlways: true }),
