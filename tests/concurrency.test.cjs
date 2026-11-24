@@ -192,7 +192,7 @@ test("dashboard guest (no login): reads every project except BusyBee, read-only,
   assert.equal(out.answer.trim().split("\n")[0], "ok");
   assert.match(got.system, /without signing in/);
   assert.match(got.system, /Projects selected for this conversation[\s\S]*heatmap-dashboard/);
-  assert.match(got.system, /NO market cap for Indian stocks/);
+  assert.match(got.system, /No, we don.t have market caps for Indian stocks/);
   assert.match(got.system, /BusyBee is closed/);
   const names = (got.tools || []).map((t) => t.name);
   assert.ok(!names.some((n) => /busybee|^propose_|_write$|^db_write|schedule_task|edit_watchlist/i.test(n)), `guest tools: ${names.join(",")}`);
@@ -202,3 +202,12 @@ test("dashboard guest (no login): reads every project except BusyBee, read-only,
   assert.ok(guestTools.some((n) => /xraydar/.test(n)), `xraydar tool offered: ${guestTools.join(",")}`);
 });
 
+
+test("Indian market caps: every channel is told the team does not have them and not to quote market_cap_inr", () => {
+  const { buildSystemPrompt } = require("../src/prompt");
+  for (const opts of [{ telegram: true }, { channel: "dashboard" }, { scheduled: true }]) {
+    const p = buildSystemPrompt({ user: { label: "x" }, selected: [], ...opts });
+    assert.match(p, /No, we don't have market caps for Indian stocks/);
+    assert.match(p, /Do not quote, count or describe the instruments\.market_cap_inr/);
+  }
+});
