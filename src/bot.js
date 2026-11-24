@@ -657,40 +657,51 @@ class Bot {
    * user: { email, name, telegramUserId? }. Returns { answer, model, ms, steps }.
    */
   async webAsk({ user = {}, message, history = [], context = null }) {
-    const email = String(user.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+$/.test(email)) throw new HttpError(400, "user.email is required");
+    // A guest is someone using the dashboard panel without a login (ta-server AGENT_PUBLIC). They get the
+    // XRayDar data tool and web research only: no project code or databases, no BusyBee, no tasks, never admin.
+    const guest = user.guest === true;
+    const guestId = String(user.guestId || "").replace(/[^a-z0-9]/gi, "").slice(0, 32);
+    if (guest && !guestId) throw new HttpError(400, "user.guestId is required for a guest");
+    const email = guest ? "" : String(user.email || "").trim().toLowerCase();
+    if (!guest && !/^[^\s@]+@[^\s@]+$/.test(email)) throw new HttpError(400, "user.email is required");
     const text = String(message || "").trim();
     if (!text) throw new HttpError(400, "message is required");
     if (!this.engines.grok) throw new HttpError(503, "The agent's model is not configured (XAI_API_KEY).");
-    const key = `web:${email}`;
+    const key = guest ? `guest:${guestId}` : `web:${email}`;
     if (!this.limiter.take(key)) throw new HttpError(429, "You're sending questions quickly. Give it a minute and try again.");
     if (this.queued(key) >= this.cfg.maxQueuedPerPerson) throw new HttpError(429, "I'm still answering your earlier questions. Wait for those, then ask again.");
     let result, failure;
     await this.enqueue(key, async () => {
-      try { result = await this.webAnswer({ email, user, text, history, context, key }); }
+      try { result = await (guest ? this.guestAnswer({ text, history, context, key }) : this.webAnswer({ email, user, text, history, context, key })); }
       catch (e) { failure = e; }
     });
     if (failure) throw failure;
     return result;
   }
 
-  async webAnswer({ email, user, text, history, context, key }) {
-    const tgId = /^\d{1,20}$/.test(String(user.telegramUserId || "")) ? String(user.telegramUserId) : null;
+  guestAnswer({ text, history, context, key }) {
+    return this.webAnswer({ email: "", user: { name: "Dashboard visitor" }, text, history, context, key, guest: true });
+  }
+
+  async webAnswer({ email, user, text, history, context, key, guest = false }) {
+    const tgId = guest ? null : /^\d{1,20}$/.test(String(user.telegramUserId || "")) ? String(user.telegramUserId) : null;
     // Team member: their BusyBee account (by Telegram link, else by e-mail). Every dashboard
     // user has a verified @gquants.com sign-in, so they are a team member even without one.
     let member = null;
-    if (this.team) member = (tgId && await this.team.member(tgId)) || await this.team.memberByEmail(email);
-    member = member
-      ? { ...member, telegramId: tgId }
-      : { userId: null, name: user.name || email, email, role: "member", desks: [], telegramId: tgId, viaDashboard: true };
-    const userLabel = `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
-    const admin = this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId));
-    const selected = [...IDS];
-    const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
+    if (!guest) {
+      if (this.team) member = (tgId && await this.team.member(tgId)) || await this.team.memberByEmail(email);
+      member = member
+        ? { ...member, telegramId: tgId }
+        : { userId: null, name: user.name || email, email, role: "member", desks: [], telegramId: tgId, viaDashboard: true };
+    }
+    const userLabel = guest ? "a visitor to the GQ XRayDar dashboard (not signed in)" : `${user.name || member.name || email} <${email}> (GQ XRayDar dashboard)`;
+    const admin = !guest && (this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId)));
+    const selected = guest ? [] : [...IDS];
+    const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member?.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const started = Date.now();
     const ctx = {
-      projectDbs: this.projectDbs, member, openData: true, busybeeApi,
-      eti: this.eti, etiWrite: false,
+      projectDbs: guest ? null : this.projectDbs, member, openData: !guest, busybeeApi,
+      eti: guest ? null : this.eti, etiWrite: false,
       pending: null, changeQueue: [], // no Confirm button on the dashboard: no proposed data changes there
       recordChange: (e) => { this.store.addAudit(e); this.log(`[change] ${e.by || "?"} ${e.action} ${e.project}.${e.table}: ${e.summary}`); },
       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken,
@@ -708,7 +719,7 @@ class Bot {
     try {
       const out = await runWithEngines({
         mode: "default", engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: guest ? false : this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: guest ? null : this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: guest ? null : this.eti, xraydar: this.xraydar }),
         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard" }),
         ctx, history: Array.isArray(history) ? history.slice(-12) : [], message,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.webDeadlineMs,

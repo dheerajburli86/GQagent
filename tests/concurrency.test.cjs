@@ -183,3 +183,15 @@ test("server: POST /api/chat needs the shared secret and answers many dashboard 
     child.kill(); fakeX.close(); tg.close();
   }
 });
+
+test("dashboard guest (no login): answered, but with no project, database, ETI or BusyBee tools and never admin", async () => {
+  let got = null;
+  const { bot } = makeBot();
+  bot._engines = { grok: { name: "grok", model: "fake", chat: async (args) => { got = args; return { text: "ok", toolCalls: [], usage: {} }; } } };
+  const out = await bot.webAsk({ user: { guest: true, guestId: "abc123" }, message: "top 5 US stocks by market cap" });
+  assert.equal(out.answer.trim().split("\n")[0], "ok");
+  assert.match(got.system, /visitor to the GQ XRayDar dashboard/);
+  const names = (got.tools || []).map((t) => t.name);
+  assert.ok(!names.some((n) => /^project_|^eti_|busybee|repo|github/i.test(n)), `guest tools: ${names.join(",")}`);
+  await assert.rejects(bot.webAsk({ user: { guest: true }, message: "x" }), (e) => e.status === 400);
+});
