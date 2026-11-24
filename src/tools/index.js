@@ -56,10 +56,18 @@ const NO_DB = (t) => ({ ...t, run: (a, ctx) => t.run(a, { ...ctx, sb: null }) })
 
 /** buildTools({selected, user, attached, liveOn}). user.isAdmin unlocks adminOnly tools (none today). */
 /** taskTools: true only in a live conversation where a TaskRunner exists (never in scheduled runs). */
-function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, eti = null, xraydar = null, xraydarAlways = false }) {
+function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, eti = null, xraydar = null, xraydarAlways = false, allow = null }) {
+  // allow: the sources an admin switched on for this person in XRayDar (Set of "xraydar", "web", project ids).
+  // null = no per-person list (a team member on Telegram without a linked XRayDar account): team rules apply.
+  const has = (k) => !allow || allow.has(k);
+  if (allow) selected = selected.filter((id) => allow.has(id));
   const visible = (t) => !t.adminOnly || user.isAdmin;
-  const general = [timeTool, ...search.makeTools(), ...web.makeTools(), calc.tool, publicData.tool, filings.tool, macro.tool, watchlists.readTool]
+  const webTools = has("web") ? [...search.makeTools(), ...web.makeTools(), publicData.tool, filings.tool, macro.tool] : [];
+  const general = [timeTool, ...webTools, calc.tool, ...(has("heatmap-dashboard") ? [watchlists.readTool] : [])]
     .filter(visible).map((t) => ({ ...NO_DB(t), kind: "general" }));
+  if (allow && !has("web")) researchTool = null;
+  if (allow && !has("eti")) eti = null;
+  if (allow && !has("busybee")) busybeeActions = false;
   const files = attachments.makeTools(attached).map((t) => ({ ...NO_DB(t), kind: "files" }));
   const repoTools = [...repo.makeTools(selected), ...github.makeTools(selected)].map((t) => ({ ...NO_DB(t), kind: "repo" }));
   const liveTools = liveOn ? live.makeTools(selected, { projectsById: byId }) : [];
@@ -75,7 +83,7 @@ function buildTools({ selected, user = {}, attached = [], liveOn = false, resear
   const etiT = eti ? etiTools.makeTools(selected, eti).map((t) => ({ ...t, kind: "eti" })) : [];
   // GQ XRayDar: its own calculations through its server API (read-only).
   // xraydarAlways: the dashboard guest gets XRayDar's data without selecting the project (which would open its code).
-  const xrT = xraydarTools.makeTools(xraydarAlways ? [...new Set([...selected, "gq-xraydar"])] : selected, xraydar).map((t) => ({ ...t, kind: "xraydar" }));
+  const xrT = !has("xraydar") ? [] : xraydarTools.makeTools(xraydarAlways || allow ? [...new Set([...selected, "gq-xraydar"])] : selected, xraydar).map((t) => ({ ...t, kind: "xraydar" }));
   return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...xrT, ...bbTools, ...writeTools, ...etiT, ...tasks];
 }
 

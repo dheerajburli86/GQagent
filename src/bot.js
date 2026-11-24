@@ -591,7 +591,20 @@ class Bot {
     } catch (e) {
       return this.reply(m, e.message || "Could not read that file.");
     }
-    const selected = projects || this.selectionOf(chatId);
+    let selected = projects || this.selectionOf(chatId);
+    // Per-person access (Shankar Sir): a Telegram account linked to an XRayDar account gets exactly what an admin
+    // switched on there. Not linked = the team's rules, as before. Admins in this bot are never limited.
+    let allow = null;
+    if (!scheduled && !access.admin && m.from && this.xraydar?.ready) {
+      try {
+        const a = await this.xraydar.call("GET", "/api/agent/access", { telegramId: String(m.from.id) });
+        if (a?.linked) {
+          if (!a.access?.enabled || !(a.access.sources || []).length) return this.reply(m, "The GQ Agent is not switched on for your account yet. Ask an admin to enable it in XRayDar.");
+          allow = new Set(a.access.sources.map(String));
+          selected = selected.filter((id) => allow.has(id));
+        }
+      } catch (e) { this.log(`[access] could not read XRayDar access for ${m.from.id}: ${e.message}`); }
+    }
 
     const typing = setInterval(() => this.tg.typing(chatId), 4000);
     this.tg.typing(chatId);
@@ -607,6 +620,7 @@ class Bot {
       member = await this.team.member(m.from.id);
       if (member) member = { ...member, telegramId: String(m.from.id) };
     }
+    if (allow && !allow.has("busybee")) member = null; // BusyBee identity only when BusyBee is switched on
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const ctx = {
       projectDbs: this.projectDbs, member, openData: this.cfg.projectDataAccess === "everyone", busybeeApi,
@@ -625,8 +639,8 @@ class Bot {
       await marketCalendar.load(this.snapshots);
       const out = await runWithEngines({
         mode: engine, engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti, xraydar: this.xraydar }),
-        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, eti: this.eti, xraydar: this.xraydar, allow }),
+        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true, allow }),
         ctx, history: hist, message: text,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
         checkBudget: () => this.store.check(userId, this.cfg, this.now()),
@@ -689,8 +703,10 @@ class Bot {
     const tgId = guest ? null : /^\d{1,20}$/.test(String(user.telegramUserId || "")) ? String(user.telegramUserId) : null;
     // Team member: their BusyBee account (by Telegram link, else by e-mail). Every dashboard
     // user has a verified @gquants.com sign-in, so they are a team member even without one.
+    // What an admin allowed this person (sent by XRayDar, which is trusted through the shared secret).
+    const allow = !guest && user.access && Array.isArray(user.access.sources) ? new Set(user.access.sources.map(String)) : null;
     let member = null;
-    if (!guest) {
+    if (!guest && (!allow || allow.has("busybee"))) {
       if (this.team) member = (tgId && await this.team.member(tgId)) || await this.team.memberByEmail(email);
       member = member
         ? { ...member, telegramId: tgId }
@@ -700,7 +716,7 @@ class Bot {
     const admin = !guest && (this.cfg.adminUserIds.size === 0 || (tgId && this.cfg.adminUserIds.has(tgId)));
     // Guests (dashboard, no login) read every project's code and data EXCEPT BusyBee (staff tasks, timesheets,
     // payroll). Read-only: no writes, no BusyBee actions, no tasks. The guard checks ctx.selected at call time too.
-    const selected = guest ? IDS.filter((id) => id !== "busybee") : [...IDS];
+    const selected = guest ? IDS.filter((id) => id !== "busybee") : allow ? IDS.filter((id) => allow.has(id)) : [...IDS];
     const busybeeApi = this.cfg.busybeeAppUrl && this.cfg.busybeeAgentSecret && member?.userId && tgId ? { url: this.cfg.busybeeAppUrl, secret: this.cfg.busybeeAgentSecret } : null;
     const started = Date.now();
     const ctx = {
@@ -724,8 +740,8 @@ class Bot {
       await marketCalendar.load(this.snapshots);
       const out = await runWithEngines({
         mode: "default", engines: this.engines, researchTool: this.researchTool,
-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar, xraydarAlways: true }),
-        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached: [], toolNames, channel: "dashboard", guest }),
+        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!admin }, attached: [], liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: false, eti: this.eti, xraydar: this.xraydar, xraydarAlways: true, allow }),
+        buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected: allow ? selected.filter((id) => allow.has(id)) : selected, attached: [], toolNames, channel: "dashboard", guest, allow }),
         ctx, history: Array.isArray(history) ? history.slice(-12) : [], message,
         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.webDeadlineMs,
         checkBudget: () => this.store.check(key, this.cfg, this.now()),

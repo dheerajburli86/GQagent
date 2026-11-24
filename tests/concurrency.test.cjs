@@ -211,3 +211,25 @@ test("Indian market caps: every channel is told the team does not have them and 
     assert.match(p, /Do not quote, count or describe the instruments\.market_cap_inr/);
   }
 });
+
+test("per-person access from XRayDar: only the switched-on sources become tools, on the dashboard and in the prompt", async () => {
+  const { buildTools } = require("../src/tools");
+  const { XRayDarClient } = require("../src/tools/xraydar");
+  const xr = new XRayDarClient({ url: "https://x", secret: "s" });
+  const research = { name: "deep_research", description: "r", parameters: { type: "object", properties: {} }, run: async () => ({}) };
+  const names = (allow) => buildTools({ selected: ["heatmap-dashboard", "busybee", "eti", "gq-xraydar"], xraydar: xr, researchTool: research, allow }).map((t) => t.name);
+  const only = names(new Set(["xraydar"]));
+  assert.ok(only.includes("xraydar"), only.join(","));
+  assert.ok(!only.some((n) => /search|fetch|research|repo|grep|read_file|eti|busybee|project_query|filings|macro/i.test(n)), `xraydar-only tools: ${only.join(",")}`);
+  const web = names(new Set(["web"]));
+  assert.ok(web.some((n) => /search/i.test(n)) && !web.includes("xraydar"), web.join(","));
+  const team = names(null);
+  assert.ok(team.includes("xraydar") && team.some((n) => /search/i.test(n)), "no list = team rules unchanged");
+
+  let got = null;
+  const { bot } = makeBot();
+  bot._engines = { grok: { name: "grok", model: "fake", chat: async (args) => { got = args; return { text: "ok", toolCalls: [], usage: {} }; } } };
+  await bot.webAsk({ user: { email: "a@b.com", name: "A", access: { sources: ["xraydar"] } }, message: "hi" });
+  assert.match(got.system, /You may use ONLY: XRayDar market data/);
+  assert.ok(!(got.tools || []).some((t) => /search|busybee|project_/i.test(t.name)), (got.tools || []).map((t) => t.name).join(","));
+});
