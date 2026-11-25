@@ -24,7 +24,7 @@ class XRayDarClient {
   }
 }
 
-const ACTIONS = ["fields", "resolve", "stock", "chart_read", "compare", "screen", "market", "review", "signal_stats", "brief"];
+const ACTIONS = ["fields", "resolve", "stock", "chart_read", "chart_link", "compare", "screen", "market", "review", "signal_stats", "brief"];
 
 const tool = (client) => ({
   name: "xraydar",
@@ -34,18 +34,21 @@ Actions:
 - resolve {query}: find an instrument by symbol or name.
 - stock {ref}: the full technical picture of one instrument (ref = symbol or id).
 - chart_read {ref, tfs?}: a plain-language chart read for timeframes, e.g. "D,W".
+- chart_link {ref, screen?, tf?, tf2?, bench?, country?}: a link that opens one chart on the dashboard exactly as asked. screen = chart (Chart lab, the default), stock (the stock page) or RSIMMA / RSIACC / RSCMMA / RSCACC; tf = period (D, W, M, Q, H, N, Y, or e.g. 2M); on the RSI/RSC screens tf is the left window and tf2 the right; bench = what an RSC screen compares against (a stock, an index such as "Nifty 50" or "S&P 500", or a house index key such as CW|USD|G); country picks between same-symbol listings. Returns {url}; if it returns candidates, ask which one.
 - compare {a, b}: two instruments side by side.
 - screen {conditions?, scope?, sort?, limit?, columns?}: stocks matching ALL conditions (conditions may be empty for a pure ranking, e.g. scope {country} + sort {field: capUsd, dir: desc}). A condition is {field, op, value?, value2?}; op is one of > >= < <= between is "is not" in contains "is true" "is false" "is set". Money fields (capUsd) are in US dollars (10 billion = 10000000000). scope narrows by {country, region, classification, sector, industryGroup, cap, assetClass}. sort = {field, dir: "desc"|"asc"}. columns = extra field keys to return per row.
 - market {query}: index levels, breadth, regime and rotation. query: G (global), R:<region> or C:<country>, e.g. C:India, C:United States.
 - review {symbols? | watchlist?, question?}: which names in a list are rising, with evidence.
 - signal_stats: back-test summary of the signals. brief {period: daily|weekly}: the market brief text.
-Always give the as-of date from the result. Do not quote a field you did not get back.`,
+Always give the as-of date from the result. Do not quote a field you did not get back.
+LINKS: stock, chart_read, market and every screen row come back with a dashboard link (links.chart, link, chart). Whenever an answer is about a particular instrument or chart, end it with that link as a markdown link, e.g. [Open RELIANCE chart](url); for a screen, link each listed name. When the person asks to see or open a chart or a screen, call chart_link and give its url. Never write a dashboard URL yourself; use only urls the tool returned.`,
   parameters: {
     type: "object",
     properties: {
       action: { type: "string", enum: ACTIONS },
       search: { type: "string" }, group: { type: "string" },
       query: { type: "string" }, ref: { type: "string" }, tfs: { type: "string" },
+      screen: { type: "string" }, tf: { type: "string" }, tf2: { type: "string" }, bench: { type: "string" }, country: { type: "string" },
       a: { type: "string" }, b: { type: "string" },
       conditions: { type: "array", items: { type: "object", properties: { field: { type: "string" }, op: { type: "string" }, value: { type: "string" }, value2: { type: "string" } } } },
       scope: { type: "object", properties: { country: { type: "string" }, region: { type: "string" }, classification: { type: "string" }, sector: { type: "string" }, industryGroup: { type: "string" }, cap: { type: "string" }, assetClass: { type: "string" } } },
@@ -66,6 +69,13 @@ Always give the as-of date from the result. Do not quote a field you did not get
       case "resolve": return client.call("GET", `/api/resolve?q=${enc(a.query || a.ref || "")}`);
       case "stock": return client.call("GET", `/api/stock/${enc(a.ref || a.query || "")}`);
       case "chart_read": return client.call("GET", `/api/chart-read/${enc(a.ref || a.query || "")}?tfs=${enc(a.tfs || "D,W")}`);
+      case "chart_link": {
+        const q = new URLSearchParams();
+        for (const k of ["ref", "screen", "tf", "tf2", "bench", "country"]) if (a[k]) q.set(k, String(a[k]));
+        if (!a.ref && a.query) q.set("ref", String(a.query));
+        if (!q.get("ref")) return { error: "give ref: the symbol or name of the instrument" };
+        return client.call("GET", `/api/chart-link?${q}`);
+      }
       case "compare": return client.call("GET", `/api/compare?a=${enc(a.a || "")}&b=${enc(a.b || "")}`);
       case "screen": {
         // a ranking alone is a valid screen ("top 5 US stocks by market cap": scope + sort, no condition)
