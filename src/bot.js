@@ -733,9 +733,9 @@ class Bot {
       task: this.runner && tgId ? { runner: this.runner, chatId: tgId, userId: tgId, userLabel, admin, chatProjects: selected, engine: "default" } : null,
     };
     const where = context && typeof context === "object"
-      ? [context.page && `page "${String(context.page).slice(0, 60)}"`, (context.symbol || context.name) && `instrument ${[context.symbol, context.name].filter(Boolean).join(" · ").slice(0, 120)}${context.country ? ` (${context.country})` : ""}`, context.tf && `timeframe ${String(context.tf).slice(0, 10)}`].filter(Boolean).join(", ")
+      ? [context.page && `page "${String(context.page).slice(0, 60)}"`, (context.symbol || context.name) && `instrument ${[context.symbol, context.name].filter(Boolean).join(" · ").slice(0, 120)}${context.country ? ` (${context.country})` : ""}`, context.tf && `timeframe ${String(context.tf).slice(0, 10)}`, context.view && `chart type ${String(context.view).slice(0, 30)}`, context.mode && `screen ${String(context.mode).slice(0, 10)}`, (context.left || context.right) && `periods ${[context.left, context.right].filter(Boolean).join(" | ").slice(0, 12)}`, context.instrumentId && `instrument id ${String(context.instrumentId).slice(0, 40)}`].filter(Boolean).join(", ")
       : "";
-    const message = where ? `${text}\n\n(Asked on the GQ XRayDar dashboard; on screen: ${where}. Use this only if the question refers to it, e.g. "this stock".)` : text;
+    const message = where ? `${text}\n\n(Asked on the GQ XRayDar dashboard; on screen: ${where}. Use this only if the question refers to it, e.g. "this stock" or "change this chart"; to change the open chart, call xraydar chart_link for that same instrument and give only that link.)` : text;
     try {
       await marketCalendar.load(this.snapshots);
       const out = await runWithEngines({
